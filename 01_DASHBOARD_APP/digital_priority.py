@@ -385,6 +385,21 @@ def fig_scatter(d: pd.DataFrame, style_fig):
     fig.update_layout(xaxis_title="Net oil, last test (BOPD)", yaxis_title="Total priority score")
     return style_fig(fig, 420, legend=True)
 
+def fig_production_quadrant(d: pd.DataFrame, style_fig):
+    m = d[d["net_oil"].notna() & d["gross"].notna()]
+    if m.empty:
+        return None
+    fig = go.Figure()
+    for t in TECH_ORDER + ["Not assessed"]:
+        sub = m[m["Recommendation"] == t]
+        if sub.empty:
+            continue
+        fig.add_scatter(x=sub["net_oil"] * BBL, y=sub["gross"] * BBL, mode="markers+text", text=sub["Well"], textposition="top center", name=t,
+                        marker=dict(size=12, color=COLORS.get(t, "#5F6368"), line=dict(color="#FFFFFF", width=1)),
+                        hovertemplate="<b>%{text}</b><br>Net Oil: %{x:,.0f} BOPD<br>Gross Rate: %{y:,.0f} BLPD<extra></extra>")
+    fig.update_layout(xaxis_title="Net Oil Rate (BOPD)", yaxis_title="Gross Fluid Rate (BLPD)")
+    return style_fig(fig, 420, legend=True)
+
 def fig_tech_comparison(d: pd.DataFrame, style_fig):
     m = d[d["Rank"].notna()]
     if m.empty:
@@ -413,6 +428,19 @@ def fig_tech_comparison(d: pd.DataFrame, style_fig):
     
     fig.update_layout(barmode="group", yaxis_title="Average Parameter Score", xaxis_title="Engineering Parameter")
     return style_fig(fig, 420, legend=True)
+
+def fig_nlap_distribution(d: pd.DataFrame, style_fig):
+    m = d[d["nlap"].notna()]
+    if m.empty:
+        return None
+    fig = go.Figure()
+    for t in TECH_ORDER:
+        sub = m[m["Recommendation"] == t]
+        if sub.empty:
+            continue
+        fig.add_box(y=sub["nlap"] * FT, name=t, marker_color=COLORS[t], boxpoints="all", jitter=0.3)
+    fig.update_layout(yaxis_title="NLAP Fluid Level (ft below surface)", xaxis_title="Artificial Lift Tier")
+    return style_fig(fig, 420, legend=False)
 
 def fig_radar(d: pd.DataFrame, well: str, style_fig):
     m = d[d["Rank"].notna()]
@@ -526,6 +554,24 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             if f_tc is not None:
                 plot(f_tc, "dig_tech_comp")
             st.caption("Grouped bar comparison showing average parameter score for VSD, ROPC, and PT Sensor tiers.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        st.markdown("#### 📉 Production Dynamics & Downhole Fluid Level Analysis")
+        pr_col1, pr_col2 = st.columns(2)
+        with pr_col1, st.container(border=True):
+            st.markdown("**Net Oil vs. Gross Rate (Production Quadrants)**")
+            f_pq = fig_production_quadrant(res, style_fig)
+            if f_pq is not None:
+                plot(f_pq, "dig_prod_quad")
+            st.caption("Correlating oil production against total fluid handled across all running wells.")
+
+        with pr_col2, st.container(border=True):
+            st.markdown("**NLAP Fluid Level Distribution by Tier**")
+            f_nl = fig_nlap_distribution(res, style_fig)
+            if f_nl is not None:
+                plot(f_nl, "dig_nlap_dist")
+            st.caption("Box plot distribution of dynamic fluid levels (NLAP) across recommendation tiers.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
