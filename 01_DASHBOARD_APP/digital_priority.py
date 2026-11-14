@@ -378,10 +378,11 @@ def fig_scatter(d: pd.DataFrame, style_fig):
         g = m[m["Recommendation"] == t]
         if g.empty:
             continue
-        fig.add_scatter(x=g["net_oil"] * BBL, y=g["Total score"], mode="markers+text", text=g["Well"], textposition="top center", name=t,
+        fig.add_scatter(x=g["net_oil"] * BBL, y=g["Total score"], mode="markers", name=t,
                         marker=dict(size=np.clip((g["gross"].fillna(g["gross"].median()) * BBL) / max(m["gross"].max() * BBL, 1) * 38 + 10, 10, 48), color=COLORS[t],
                                     line=dict(color="#FFFFFF", width=1.5), opacity=0.9),
-                        hovertemplate="%{text}<br>Net oil %{x:,.0f} BOPD<br>Total score %{y:.1f}<extra></extra>")
+                        hovertemplate="<b>%{text}</b><br>Net oil: %{x:,.0f} BOPD<br>Total score: %{y:.1f}<extra></extra>",
+                        text=g["Well"])
     fig.update_layout(xaxis_title="Net oil, last test (BOPD)", yaxis_title="Total priority score")
     return style_fig(fig, 420, legend=True)
 
@@ -394,9 +395,10 @@ def fig_production_quadrant(d: pd.DataFrame, style_fig):
         sub = m[m["Recommendation"] == t]
         if sub.empty:
             continue
-        fig.add_scatter(x=sub["net_oil"] * BBL, y=sub["gross"] * BBL, mode="markers+text", text=sub["Well"], textposition="top center", name=t,
+        fig.add_scatter(x=sub["net_oil"] * BBL, y=sub["gross"] * BBL, mode="markers", name=t,
                         marker=dict(size=12, color=COLORS.get(t, "#5F6368"), line=dict(color="#FFFFFF", width=1)),
-                        hovertemplate="<b>%{text}</b><br>Net Oil: %{x:,.0f} BOPD<br>Gross Rate: %{y:,.0f} BLPD<extra></extra>")
+                        hovertemplate="<b>%{text}</b><br>Net Oil: %{x:,.0f} BOPD<br>Gross Rate: %{y:,.0f} BLPD<extra></extra>",
+                        text=sub["Well"])
     fig.update_layout(xaxis_title="Net Oil Rate (BOPD)", yaxis_title="Gross Fluid Rate (BLPD)")
     return style_fig(fig, 420, legend=True)
 
@@ -441,6 +443,57 @@ def fig_nlap_distribution(d: pd.DataFrame, style_fig):
         fig.add_box(y=sub["nlap"] * FT, name=t, marker_color=COLORS[t], boxpoints="all", jitter=0.3)
     fig.update_layout(yaxis_title="NLAP Fluid Level (ft below surface)", xaxis_title="Artificial Lift Tier")
     return style_fig(fig, 420, legend=False)
+
+def fig_mechanical_stress(d: pd.DataFrame, style_fig):
+    m = d[d["goodman_pct"].notna() & d["beam_pct"].notna()]
+    if m.empty:
+        return None
+    fig = go.Figure()
+    for t in TECH_ORDER + ["Not assessed"]:
+        sub = m[m["Recommendation"] == t]
+        if sub.empty:
+            continue
+        fig.add_scatter(x=sub["goodman_pct"], y=sub["beam_pct"], mode="markers", name=t,
+                        marker=dict(size=12, color=COLORS.get(t, "#5F6368"), line=dict(color="#FFFFFF", width=1)),
+                        hovertemplate="<b>%{text}</b><br>Rod Loaded: %{x:.1f}%<br>Beam Loading: %{y:.1f}%<extra></extra>",
+                        text=sub["Well"])
+    fig.update_layout(xaxis_title="Rod Loaded % (Goodman)", yaxis_title="Beam Loading %")
+    return style_fig(fig, 420, legend=True)
+
+def fig_gearbox_box(d: pd.DataFrame, style_fig):
+    m = d[d["gbx_pct"].notna()]
+    if m.empty:
+        return None
+    fig = go.Figure()
+    for t in TECH_ORDER:
+        sub = m[m["Recommendation"] == t]
+        if sub.empty:
+            continue
+        fig.add_box(y=sub["gbx_pct"], name=t, marker_color=COLORS[t], boxpoints="all", jitter=0.3)
+    fig.update_layout(yaxis_title="Gearbox Torque Loading (%)", xaxis_title="Artificial Lift Tier")
+    return style_fig(fig, 420, legend=False)
+
+def fig_test_freshness(d: pd.DataFrame, style_fig):
+    m = d[d["days_since_test"].notna()]
+    if m.empty:
+        return None
+    fig = go.Figure()
+    fig.add_histogram(x=m["days_since_test"], marker_color="#1F7A8C", nbinsx=20)
+    fig.update_layout(xaxis_title="Days Since Last Well Test", yaxis_title="Number of Wells")
+    return style_fig(fig, 420, legend=False)
+
+def fig_score_distribution(d: pd.DataFrame, style_fig):
+    m = d[d["Total score"].notna()]
+    if m.empty:
+        return None
+    fig = go.Figure()
+    for t in TECH_ORDER:
+        sub = m[m["Recommendation"] == t]
+        if sub.empty:
+            continue
+        fig.add_histogram(x=sub["Total score"], name=t, marker_color=COLORS[t], opacity=0.8)
+    fig.update_layout(barmode="overlay", xaxis_title="Total Priority Score", yaxis_title="Count")
+    return style_fig(fig, 420, legend=True)
 
 def fig_radar(d: pd.DataFrame, well: str, style_fig):
     m = d[d["Rank"].notna()]
@@ -546,7 +599,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             f_sc = fig_scatter(res, style_fig)
             if f_sc is not None:
                 plot(f_sc, "dig_scatter")
-            st.caption("Bubble size indicates gross rate. High score at low net oil highlights mechanical stress.")
+            st.caption("Hover over points to see well names. Bubble size indicates gross rate.")
 
         with sc_col2, st.container(border=True):
             st.markdown("**Average Parameter Scores by Tier**")
@@ -572,6 +625,42 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             if f_nl is not None:
                 plot(f_nl, "dig_nlap_dist")
             st.caption("Box plot distribution of dynamic fluid levels (NLAP) across recommendation tiers.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        st.markdown("#### ⚙️ Mechanical Stress & Operational Risk Analytics")
+        mech_col1, mech_col2 = st.columns(2)
+        with mech_col1, st.container(border=True):
+            st.markdown("**Mechanical Stress: Rod Loaded % vs. Beam Loading %**")
+            f_ms = fig_mechanical_stress(res, style_fig)
+            if f_ms is not None:
+                plot(f_ms, "dig_mech_stress")
+            st.caption("Evaluating sucker rod loading against structural beam loading.")
+
+        with mech_col2, st.container(border=True):
+            st.markdown("**Gearbox Torque % Loading Distribution**")
+            f_gb = fig_gearbox_box(res, style_fig)
+            if f_gb is not None:
+                plot(f_gb, "dig_gearbox_box")
+            st.caption("Box plot distribution of gearbox torque ratings across artificial lift tiers.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        st.markdown("#### 📅 Data Freshness & Priority Score Spread")
+        dt_col1, dt_col2 = st.columns(2)
+        with dt_col1, st.container(border=True):
+            st.markdown("**Well Test Data Freshness (Days Since Last Test)**")
+            f_tf = fig_test_freshness(res, style_fig)
+            if f_tf is not None:
+                plot(f_tf, "dig_test_fresh")
+            st.caption("Histogram tracking test data recency across the monitored fleet.")
+
+        with dt_col2, st.container(border=True):
+            st.markdown("**Total Priority Score Distribution by Tier**")
+            f_sd = fig_score_distribution(res, style_fig)
+            if f_sd is not None:
+                plot(f_sd, "dig_score_dist")
+            st.caption("Overlaid distribution of total priority scores across recommendation tiers.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -677,7 +766,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
                                  "Found: rod loaded (%)": ed["goodman_pct"].values, "Found: beam (%)": ed["beam_pct"].values, "Found: gearbox (%)": ed["gbx_pct"].values,
                                  "Rod loaded (%)": [base_ov["goodman_pct"].get(w, np.nan) for w in ed["Well"]],
                                  "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], 
-                                 "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]]})
+                                 "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]])})
             edited = st.data_editor(show, hide_index=True, key="dig_editor", disabled=["Well", "Found: rod loaded (%)", "Found: beam (%)", "Found: gearbox (%)"], **ui.get("STRETCH", {}))
             if st.button("💾 Save Manual Values", key="dig_save"):
                 new = pd.DataFrame({"Well": edited["Well"], "goodman_pct": edited["Rod loaded (%)"],
