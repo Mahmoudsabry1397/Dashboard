@@ -50,16 +50,16 @@ PARAM_COLORS = {"net_oil": "#2F80ED", "gross": "#CE1141", "nlap": "#1F7A8C", "ro
 # ══════════════════════════════════════════════════════════════════════════════
 # Parameter names, tolerant of spelling and punctuation: "Rod Loaded", "rod loding", "Rods load", "G.B Torque loaded", "GB torque", "Gear box load", "Beam loading"
 _LOAD = r"(?:l[o0]a?d(?:ed|ing|ng|s)?|l[o0]d(?:ed|ing)?)"
-_ROD = [r"\brods?\b[\s.\-:]*(?:string[\s.\-:]*)?" + _LOAD + r"\b", r"\bgoodman\b(?:[\s.\-:]*(?:diagram|ratio|" + _LOAD + r"))?"]
-_BEAM = [r"\bbeam\b[\s.\-:]*(?:" + _LOAD + r")?"]
-_GBX = [r"(?:\bg\s*[./\-]?\s*b\b\.?|\bgear\s*-?\s*box\b|\bgbx\b|\bg/box\b)[\s.\-:]*(?:(?:torque|trq|tq)\b[\s.\-:]*)?(?:" + _LOAD + r")?",
-        r"\b(?:torque|trq)\b[\s.\-:]*" + _LOAD + r"\b"]
+_ROD = [r"rods?[\s.\-:]*(?:string[\s.\-:]*)?" + _LOAD + r"", r"goodman(?:[\s.\-:]*(?:diagram|ratio|" + _LOAD + r"))?"]
+_BEAM = [r"beam[\s.\-:]*(?:" + _LOAD + r")?"]
+_GBX = [r"(?:g\s*[./\-]?\s*b\.?|gear\s*-?\s*box|gbx|g/box)[\s.\-:]*(?:(?:torque|trq|tq)[\s.\-:]*)?(?:" + _LOAD + r")?",
+        r"(?:torque|trq)[\s.\-:]*" + _LOAD + r""]
 # what may sit between a name and its number: "Rod Loaded : 85 %", "Beam loading = ~60", "G.B Torque loaded (72%)", "up to 80"
-_SEP = r"(?:[\s:=\-.,;|/>(\[{~\u2248\u00b1]|loaded|loading|load|torque|stress|max|maximum|value|ratio|is|at|of|about|around|approx\.?|approximately|near|nearly|up|to|percent|pct|%)*?"
+_SEP = r"(?:[\s:=\-.,;|/>(\[{~≈±]|loaded|loading|load|torque|stress|max|maximum|value|ratio|is|at|of|about|around|approx\.?|approximately|near|nearly|up|to|percent|pct|%)*?"
 _NUM = r"(\d+(?:\.\d+)?)"
-_UNIT = r"\s*(%|pct\b|percent\b|psi\b|kn\b|lbs?\b|kg\b)?"
+_UNIT = r"\s*(%|pct|percent|psi|kn|lbs?|kg)?"
 _NOT_PCT = {"psi", "kn", "lb", "lbs", "kg"}
-_DIGITS = str.maketrans("\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669\u066b\u066c\u066a\uff05\u00a0\u2013\u2014\u2212",
+_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩٫٬٪％ –—−",
                         "0123456789.,%% ---")
 
 
@@ -108,7 +108,7 @@ def _wkey(x) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(x).upper())
 
 
-_MENTION = r"rods?\s*[.\-:]*\s*l[o0]|beam\s*[.\-:]*\s*l[o0]|g\s*[./\-]?\s*b\b\.?\s*(?:torque|l[o0])|gear\s*-?\s*box\s*(?:torque|l[o0])"
+_MENTION = r"rods?\s*[.\-:]*\s*l[o0]|beam\s*[.\-:]*\s*l[o0]|g\s*[./\-]?\s*b\.?\s*(?:torque|l[o0])|gear\s*-?\s*box\s*(?:torque|l[o0])"
 
 
 def _dyno_columns(df: pd.DataFrame, primary) -> list:
@@ -532,7 +532,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     with c2, st.container(border=True):
         plot(fig_donut(res, style_fig), "dig_donut")
 
-    t1, t2, t3, t4 = st.tabs(["🏆 Ranking", "🔥 Score heatmap", "🎯 Net oil vs score", "🕸️ Well profile"])
+    t1, t2, t3, t4, t5 = st.tabs(["🏆 Ranking", "🔥 Score heatmap", "🎯 Net oil vs score", "🕸️ Well profile", "📊 Selection Analytics"])
     with t1:
         f = fig_ranking(res, style_fig, meta)
         if f is not None:
@@ -559,6 +559,8 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
                 with st.container(border=True):
                     plot(f, "dig_radar")
                 st.caption("Each axis is the well's score as a share of the parameter's range, against the median ranked well.")
+    with t5:
+        render_selection_analytics(res, ui)
 
     section("Detailed table")
     fl = st.multiselect("Show", ["VSD", "ROPC", "PT sensor", "Not assessed"], default=["VSD", "ROPC", "PT sensor"], key="dig_filter")
@@ -607,3 +609,88 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
         table(src)
         st.caption("Order of preference: manual entry, numbers read from the master 'DYNAMOMETER TEST RESULTS' text, imported Echometer report. "
                    "If a value was read wrongly from the text, correct it above.")
+
+
+
+def render_selection_analytics(matrix_df: pd.DataFrame, ui: dict):
+    """Render advanced charts and visualizations to support artificial lift selection."""
+    ui["section"]("Artificial Lift Selection Analytics & Decision Support")
+    
+    if matrix_df.empty:
+        st.info("No matrix data available for analytics.")
+        return
+
+    # 1. High-level Metrics
+    col1, col2, col3, col4 = st.columns(4)
+    total_wells = len(matrix_df)
+    vsd_count = len(matrix_df[matrix_df["Recommendation"] == "VSD"])
+    ropc_count = len(matrix_df[matrix_df["Recommendation"] == "ROPC"])
+    pt_count = len(matrix_df[matrix_df["Recommendation"] == "PT sensor"])
+    
+    with col1:
+        st.markdown(ui["kpi"]("Assessed Wells", total_wells, "Active running wells", tone="neutral"), unsafe_allow_html=True)
+    with col2:
+        st.markdown(ui["kpi"]("VSD Candidates", vsd_count, f"{vsd_count/total_wells:.1%}" if total_wells else "0%", tone="bad"), unsafe_allow_html=True)
+    with col3:
+        st.markdown(ui["kpi"]("ROPC Candidates", ropc_count, f"{ropc_count/total_wells:.1%}" if total_wells else "0%", tone="warn"), unsafe_allow_html=True)
+    with col4:
+        st.markdown(ui["kpi"]("PT Sensor Candidates", pt_count, f"{pt_count/total_wells:.1%}" if total_wells else "0%", tone="good"), unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 2. Scatter Plot: Net Oil vs Total Score color-coded by Recommendation
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("**Priority Score vs. Net Oil Rate**")
+        fig_scatter = go.Figure()
+        for tech in TECH_ORDER:
+            sub = matrix_df[matrix_df["Recommendation"] == tech]
+            if not sub.empty:
+                fig_scatter.add_trace(go.Scatter(
+                    x=sub["net_oil"],
+                    y=sub["Total score"],
+                    mode="markers",
+                    name=EMOJI.get(tech, tech),
+                    marker=dict(size=10, color=COLORS.get(tech, "#9AA0A6")),
+                    text=sub["Well"],
+                    hovertemplate="<b>%{text}</b><br>Net Oil: %{x:.1f} m³/d<br>Total Score: %{y:.1f}<extra></extra>"
+                ))
+        fig_scatter.update_xaxes(title="Net Oil Rate (m³/d)")
+        fig_scatter.update_yaxes(title="Total Priority Score")
+        ui["plot"](fig_scatter, key="analytics_score_vs_oil")
+
+    # 3. Technology Breakdown Donut Chart
+    with col_b:
+        st.markdown("**Recommendation Share**")
+        counts = matrix_df["Recommendation"].value_counts()
+        fig_pie = go.Figure(go.Pie(
+            labels=[EMOJI.get(t, t) for t in counts.index],
+            values=counts.values,
+            hole=0.4,
+            marker=dict(colors=[COLORS.get(t, "#9AA0A6") for t in counts.index])
+        ))
+        fig_pie.update_layout(margin=dict(l=20, r=20, t=20, b=20))
+        ui["plot"](fig_pie, key="analytics_tech_share")
+
+    st.markdown("---")
+
+    # 4. Engineering Parameters Distribution Box Plots
+    st.markdown("**Engineering Parameters Distribution by Recommendation Tier**")
+    param_choice = st.selectbox(
+        "Select Parameter to Compare",
+        options=[("rod", "Rod Loaded (%)"), ("beam", "Beam Loading (%)"), ("gbx", "Gearbox Torque (%)"), ("nlap", "NLAP (m)"), ("gross", "Gross Rate (m³/d)"), ("net_oil", "Net Oil (m³/d)")],
+        format_func=lambda x: x[1],
+        key="analytics_box_param"
+    )[0]
+
+    fig_box = go.Figure()
+    for tech in TECH_ORDER:
+        sub = matrix_df[matrix_df["Recommendation"] == tech]
+        if not sub.empty and param_choice in sub.columns:
+            fig_box.add_trace(go.Box(
+                y=sub[param_choice],
+                name=EMOJI.get(tech, tech),
+                marker_color=COLORS.get(tech, "#9AA0A6")
+            ))
+    fig_box.update_yaxes(title=param_choice.replace("_", " ").title())
+    ui["plot"](fig_box, key=f"analytics_box_{param_choice}")
