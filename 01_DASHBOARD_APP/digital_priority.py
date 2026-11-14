@@ -48,13 +48,11 @@ PARAM_COLORS = {"net_oil": "#2F80ED", "gross": "#CE1141", "nlap": "#1F7A8C", "ro
 # ══════════════════════════════════════════════════════════════════════════════
 # Reading numbers out of the master dynamometer text
 # ══════════════════════════════════════════════════════════════════════════════
-# Parameter names, tolerant of spelling and punctuation: "Rod Loaded", "rod loding", "Rods load", "G.B Torque loaded", "GB torque", "Gear box load", "Beam loading"
 _LOAD = r"(?:l[o0]a?d(?:ed|ing|ng|s)?|l[o0]d(?:ed|ing)?)"
 _ROD = [r"\brods?\b[\s.\-:]*(?:string[\s.\-:]*)?" + _LOAD + r"\b", r"\bgoodman\b(?:[\s.\-:]*(?:diagram|ratio|" + _LOAD + r"))?"]
 _BEAM = [r"\bbeam\b[\s.\-:]*(?:" + _LOAD + r")?"]
 _GBX = [r"(?:\bg\s*[./\-]?\s*b\b\.?|\bgear\s*-?\s*box\b|\bgbx\b|\bg/box\b)[\s.\-:]*(?:(?:torque|trq|tq)\b[\s.\-:]*)?(?:" + _LOAD + r")?",
         r"\b(?:torque|trq)\b[\s.\-:]*" + _LOAD + r"\b"]
-# what may sit between a name and its number: "Rod Loaded : 85 %", "Beam loading = ~60", "G.B Torque loaded (72%)", "up to 80"
 _SEP = r"(?:[\s:=\-.,;|/>(\[{~\u2248\u00b1]|loaded|loading|load|torque|stress|max|maximum|value|ratio|is|at|of|about|around|approx\.?|approximately|near|nearly|up|to|percent|pct|%)*?"
 _NUM = r"(\d+(?:\.\d+)?)"
 _UNIT = r"\s*(%|pct\b|percent\b|psi\b|kn\b|lbs?\b|kg\b)?"
@@ -65,13 +63,12 @@ _DIGITS = str.maketrans("\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\
 
 def _clean_text(text: str) -> str:
     t = str(text).lower().translate(_DIGITS)
-    t = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", t)          # 27,500 -> 27500
-    t = re.sub(r"(?<=\d),(?=\d{1,2}(?!\d))", ".", t)       # 85,5 -> 85.5
+    t = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", t)
+    t = re.sub(r"(?<=\d),(?=\d{1,2}(?!\d))", ".", t)
     return t
 
 
 def _find(t: str, names, lo: float, hi: float):
-    """First number that follows one of the name patterns, as a percentage within [lo, hi]. A 0.85-style fraction becomes 85."""
     for nm in names:
         for m in re.finditer(nm + _SEP + _NUM + _UNIT, t):
             raw, unit = m.group(1), m.group(2)
@@ -86,13 +83,6 @@ def _find(t: str, names, lo: float, hi: float):
 
 
 def parse_dyno_text(text) -> dict:
-    """Extract rod loaded, beam loading and gearbox torque (all in %) from the free text of one dynamometer result cell.
-
-    The cell holds everything together and each value follows its parameter name, e.g.
-        'Rod Loaded : 85 %, Beam loading : 60 %, G.B Torque loaded : 72 %'
-    Spelling variants, other separators, brackets, "~", "approx", fractions (0.85) and decimal commas are tolerated.
-    Rod loaded is returned as goodman_pct (the stored key name is kept so saved manual values still work).
-    """
     out = {}
     if not isinstance(text, str) or not text.strip():
         return out
@@ -112,13 +102,12 @@ _MENTION = r"rods?\s*[.\-:]*\s*l[o0]|beam\s*[.\-:]*\s*l[o0]|g\s*[./\-]?\s*b\b\.?
 
 
 def _dyno_columns(df: pd.DataFrame, primary) -> list:
-    """The configured dynamometer column first, then any other column named like a dynamometer result, then any text column that actually mentions the parameters."""
     cols = [primary] if primary in df.columns else []
     for c in df.columns:
         if c not in cols and any(k in _wkey(c) for k in ("DYNA", "DYNO")):
             cols.append(c)
     for c in df.columns:
-        if c in cols or not (pd.api.types.is_object_dtype(df[c]) or pd.api.types.is_string_dtype(df[c])):   # pandas 3 uses a string dtype, not object
+        if c in cols or not (pd.api.types.is_object_dtype(df[c]) or pd.api.types.is_string_dtype(df[c])):
             continue
         try:
             if df[c].str.contains(_MENTION, case=False, regex=True, na=False).any():
@@ -128,9 +117,6 @@ def _dyno_columns(df: pd.DataFrame, primary) -> list:
     return cols
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Assemble the inputs for every well
-# ══════════════════════════════════════════════════════════════════════════════
 def _echometer_latest(dyna: pd.DataFrame) -> dict:
     out = {}
     if dyna is None or dyna.empty:
@@ -168,13 +154,11 @@ def collect_inputs(wells, status_map: dict, tests_all: pd.DataFrame, dfl_all: pd
                    data_dir: str = "", today=None) -> pd.DataFrame:
     today = pd.Timestamp(today or pd.Timestamp.today()).normalize()
     rows = {w: {"Well": w, "Status": status_map.get(w, "NO DATA")} for w in wells}
-    # last test with a net oil value
     t = tests_all.dropna(subset=["Net Oil"]).sort_values("Date")
     for w, g in t.groupby("Well"):
         if w in rows:
             s = g.iloc[-1]
             rows[w].update({"last_test": pd.Timestamp(s["Date"]), "net_oil": float(s["Net Oil"]), "gross": float(s["Rate"]) if pd.notna(s["Rate"]) else np.nan})
-    # last NLAP (dashboard DFL plus imported acoustic surveys)
     dfl = dfl_all
     if data_dir:
         dfl = rsto.merge_report_dfl(dfl_all, rsto.load_all(data_dir)["dfl"])
@@ -182,7 +166,6 @@ def collect_inputs(wells, status_map: dict, tests_all: pd.DataFrame, dfl_all: pd
         if w in rows:
             s = g.iloc[-1]
             rows[w].update({"nlap": float(s["NLAP"]), "nlap_date": pd.Timestamp(s["Date"])})
-    # dynamometer values: master text, then Echometer, then manual
     text_by_well, parsed_by_well, srcinfo_by_well = {}, {}, {}
     primary = M.get("dyno") if M else None
     dcols = _dyno_columns(df, primary) if M else []
@@ -192,7 +175,6 @@ def collect_inputs(wells, status_map: dict, tests_all: pd.DataFrame, dfl_all: pd
         for w, g in df.groupby(keys):
             if not w:
                 continue
-            # most recent result first; a parameter missing from it is taken from the next most recent one that has it
             texts = {c: g[c].tolist() for c in dcols}
             n = len(g)
             dates = pd.to_datetime(g[dcol], errors="coerce").tolist() if dcol else [pd.NaT] * n
@@ -206,7 +188,7 @@ def collect_inputs(wells, status_map: dict, tests_all: pd.DataFrame, dfl_all: pd
                         newest_text = v
                     p = parse_dyno_text(v)
                     if p and found_text is None:
-                        found_text = v                      # newest cell that actually holds readable values
+                        found_text = v
                     for k, val_ in p.items():
                         if k not in parsed:
                             parsed[k], info[k] = val_, (dates[pos], c)
@@ -230,7 +212,7 @@ def collect_inputs(wells, status_map: dict, tests_all: pd.DataFrame, dfl_all: pd
         e = emet.get(w)
         if e:
             for k in ("goodman_pct", "beam_pct", "gbx_pct"):
-                if k in e and not str(src.get(k, "")).startswith("Master text"):   # the dynamometer test text wins over the Echometer import
+                if k in e and not str(src.get(k, "")).startswith("Master text"):
                     r[k], src[k] = e[k], f"Echometer {e['date']:%Y-%m-%d}"
             dates = e["date"]
         o = ov_by.get(w)
@@ -251,15 +233,11 @@ def collect_inputs(wells, status_map: dict, tests_all: pd.DataFrame, dfl_all: pd
     return out
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Scoring (pure)
-# ══════════════════════════════════════════════════════════════════════════════
 def minmax_score(s: pd.Series, lo: float, hi: float) -> pd.Series:
-    """Linear position of each value between the lowest (-> lo) and highest (-> hi) value of the series. NaN stays NaN."""
     mn, mx = s.min(), s.max()
     if pd.isna(mn):
         return pd.Series(np.nan, index=s.index)
-    if mx == mn:                                               # nothing to discriminate: everyone gets the middle score
+    if mx == mn:
         return s.where(s.isna(), (lo + hi) / 2)
     return lo + (hi - lo) * (s - mn) / (mx - mn)
 
@@ -273,7 +251,6 @@ def split_counts(n: int, vsd_pct: float, ropc_pct: float) -> tuple[int, int]:
 
 def build_priority(inputs: pd.DataFrame, threshold: float = 4.0, vsd_pct: float = 30.0, ropc_pct: float = 30.0, base: str = "matrix",
                    missing: str = "median", max_test_age: int = 0) -> tuple[pd.DataFrame, dict]:
-    """Returns (one row per well with scores and recommendation, meta)."""
     d = inputs.copy()
     d["Recommendation"] = "Not assessed"
     d["Reason"] = ""
@@ -288,7 +265,7 @@ def build_priority(inputs: pd.DataFrame, threshold: float = 4.0, vsd_pct: float 
     matrix = assessed & (d["net_oil"] > threshold)
     d.loc[auto, ["Recommendation", "Reason"]] = ["PT sensor", f"Net oil at or below {threshold:g} m3/d: PT sensor automatically"]
 
-    src_cols = {"net_oil": "net_oil", "gross": "gross", "nlap": "nlap", "rod": "goodman_pct", "beam": "beam_pct", "gbx": "gbx_pct"}   # rod loaded (%)
+    src_cols = {"net_oil": "net_oil", "gross": "gross", "nlap": "nlap", "rod": "goodman_pct", "beam": "beam_pct", "gbx": "gbx_pct"}
     for key, label, lo, hi in PARAMS:
         d[f"s_{key}"] = np.nan
         raw = d.loc[matrix, src_cols[key]]
@@ -327,9 +304,6 @@ def build_priority(inputs: pd.DataFrame, threshold: float = 4.0, vsd_pct: float 
     return d, meta
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Presentation table
-# ══════════════════════════════════════════════════════════════════════════════
 def detail_table(d: pd.DataFrame, meta: dict) -> pd.DataFrame:
     out = pd.DataFrame({
         "Rank": d["Rank"], "Well": d["Well"], "Recommendation": d["Recommendation"].map(EMOJI), "Why": d["Reason"], "Total score": d["Total score"].round(1),
@@ -347,9 +321,6 @@ def detail_table(d: pd.DataFrame, meta: dict) -> pd.DataFrame:
     return out.sort_values(["Rank", "Well"], na_position="last").reset_index(drop=True)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Charts
-# ══════════════════════════════════════════════════════════════════════════════
 def fig_donut(d: pd.DataFrame, style_fig):
     counts = d["Recommendation"].value_counts()
     labels = [t for t in TECH_ORDER if counts.get(t, 0) > 0]
@@ -378,7 +349,6 @@ def _num(v, spec: str, unit: str = "") -> str:
 
 
 def _hover_cards(m: pd.DataFrame) -> list[str]:
-    """One tooltip text per well: every parameter's value and its score (shown whichever bar segment is pointed at)."""
     cards = []
     for _, r in m.iterrows():
         gaps = {g.strip() for g in str(r.get("Data gaps") or "").split(",") if g.strip()}
@@ -405,7 +375,6 @@ def fig_ranking(d: pd.DataFrame, style_fig, meta: dict | None = None):
     for key, label, lo, hi in PARAMS:
         fig.add_bar(y=ylab, x=m[f"s_{key}"], orientation="h", name=label, marker_color=PARAM_COLORS[key],
                     customdata=cards, hovertemplate="%{customdata}<extra></extra>")
-    # cut lines between the groups
     tot = m["Total score"].tolist()
     recs = m["Recommendation"].tolist()
     for a, b, text in (("VSD", "ROPC", "VSD | ROPC"), ("ROPC", "PT sensor", "ROPC | PT")):
@@ -417,7 +386,7 @@ def fig_ranking(d: pd.DataFrame, style_fig, meta: dict | None = None):
     fig.update_layout(barmode="stack", xaxis_title="Total priority score (net oil 10-30 + five parameters 0-10 each)", yaxis=dict(autorange="reversed", type="category"),
                       hoverlabel=dict(bgcolor="#FFFFFF", bordercolor="#888888", font=dict(color="#111111", size=12), align="left", namelength=-1))
     fig = style_fig(fig, max(380, 24 * len(m) + 120), legend=True)
-    fig.update_layout(hovermode="closest")          # one card for the pointed well (style_fig sets "x unified")
+    fig.update_layout(hovermode="closest")
     return fig
 
 
@@ -526,170 +495,179 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     if meta["n_matrix"] == 0:
         st.info("No running well is above the net-oil threshold, so there is nothing to rank.")
 
-    c1, c2 = st.columns([3, 2])
-    with c1, st.container(border=True):
-        plot(fig_sankey(res, meta, len(all_wells), style_fig), "dig_sankey")
-    with c2, st.container(border=True):
-        plot(fig_donut(res, style_fig), "dig_donut")
+    # ════════════════════════════════════════════════════════════════════════════
+    # REORGANIZED 4-TAB WORKFLOW STRUCTURE
+    # ════════════════════════════════════════════════════════════════════════════
+    t1, t2, t3, t4 = st.tabs([
+        "📋 Updated Data Set", 
+        "⚙️ Selection Criteria", 
+        "📈 Dashboard & Analytics", 
+        "🏆 Final Recommendations"
+    ])
 
-    t1, t2, t3, t4, t5 = st.tabs(["🏆 Ranking", "🔥 Score heatmap", "🎯 Net oil vs score", "🕸️ Well profile", "📊 Selection Analytics"])
+    # ── TAB 1: UPDATED DATA SET ───────────────────────────────────────────────
     with t1:
-        f = fig_ranking(res, style_fig, meta)
-        if f is not None:
-            with st.container(border=True):
-                plot(f, "dig_rank")
-            st.caption("Each bar is the total score, split by parameter. Dotted lines mark where VSD ends and ROPC ends.")
+        section("Processed Operational Data & Inputs")
+        st.caption("Complete dataset of active and running wells incorporating well tests, NLAP fluid levels, and dynamometer results.")
+        
+        # Display summary counts for data view
+        d1_col1, d1_col2, d1_col3 = st.columns(3)
+        d1_col1.metric("Total Wells Tracked", len(inputs))
+        d1_col2.metric("Running Wells", int(inputs["Status"].eq("RUNNING").sum()))
+        d1_col3.metric("Wells with Valid Net Oil", int(inputs["net_oil"].notna().sum()))
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Clean view of inputs dataframe
+        display_inputs = inputs[["Well", "Status", "last_test", "net_oil", "gross", "nlap", "goodman_pct", "beam_pct", "gbx_pct", "dyno_sources"]].copy()
+        display_inputs.columns = ["Well", "Status", "Last Test Date", "Net Oil (m³/d)", "Gross Rate (m³/d)", "NLAP (m)", "Rod Loaded (%)", "Beam Loading (%)", "Gearbox Torque (%)", "Dynamometer Source"]
+        table(display_inputs)
+        
+        d_csv1 = display_inputs.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇ Download Updated Dataset (CSV)", d_csv1, file_name="updated_operational_dataset.csv", mime="text/csv", key="download_dataset_csv")
+
+    # ── TAB 2: SELECTION CRITERIA ─────────────────────────────────────────────
     with t2:
-        f = fig_heatmap(res, style_fig)
-        if f is not None:
-            with st.container(border=True):
-                plot(f, "dig_heat")
-            st.caption("Colour shows the position inside each parameter's own range (net oil 10 to 30, the others 0 to 10); the number is the score.")
+        section("Artificial Lift & Digitalization Selection Criteria")
+        st.markdown("""
+        The priority scoring and technology selection framework uses a rigorous multi-parameter assessment model for artificial lift and sensor deployment:
+
+        1. **Operational Filtering:**
+           * Only **RUNNING** wells are assessed. Stopped wells or wells with no operational data are automatically bypassed.
+           * **Automatic PT Sensor Rule:** Any running well whose latest test net oil is **at or below the threshold** ($\le$ threshold, default $4\text{ m}^3/\text{d} \approx 25\text{ BOPD}$) receives a **PT Sensor** automatically.
+
+        2. **Priority Matrix Scoring (0 to 10 scale per parameter):**
+           Wells above the net-oil threshold are scored relative to the distribution of all matrix wells (lowest value = bottom of range, highest value = top of range, linear interpolation in between):
+           * **Net Oil Rate:** Scored from **10 to 30 points** (higher productivity = higher priority).
+           * **Gross Rate:** Scored from **0 to 10 points**.
+           * **NLAP (Fluid Level):** Scored from **0 to 10 points**.
+           * **Rod Loaded % (Goodman):** Scored from **0 to 10 points**.
+           * **Beam Loading %:** Scored from **0 to 10 points**.
+           * **Gearbox Torque %:** Scored from **0 to 10 points**.
+           * **Total Score:** Sum of all 6 parameters (Max possible score = 80).
+
+        3. **Recommendation Tiers:**
+           * **VSD Candidates:** Top share of ranked wells (default top 30%).
+           * **ROPC Candidates:** Next share of ranked wells (default next 30%).
+           * **PT Sensors (Matrix):** Remaining ranked wells (default remaining 40%).
+        """)
+        
+        st.info(f"**Current Settings Active:** Threshold = {thr:g} m³/d | VSD Share = {vsd}% | ROPC Share = {ropc}% | Missing Data Policy = {miss}")
+
+    # ── TAB 3: DASHBOARD & ANALYTICS ──────────────────────────────────────────
     with t3:
-        f = fig_scatter(res, style_fig)
-        if f is not None:
-            with st.container(border=True):
-                plot(f, "dig_scatter")
-            st.caption("Bubble size is the gross rate. High score at low net oil means the well is loaded mechanically, not just productive.")
+        section("Decision Support Analytics & Visualizations")
+        st.caption("Interactive charts illustrating the workflow distribution, score correlation, and engineering parameter ranges.")
+
+        # Top row: Sankey and Donut
+        c_an1, c_an2 = st.columns([3, 2])
+        with c_an1, st.container(border=True):
+            plot(fig_sankey(res, meta, len(all_wells), style_fig), "dig_sankey")
+        with c_an2, st.container(border=True):
+            plot(fig_donut(res, style_fig), "dig_donut")
+
+        st.markdown("---")
+
+        # Scatter plot and Heatmap
+        sc_col1, sc_col2 = st.columns(2)
+        with sc_col1, st.container(border=True):
+            st.markdown("**Priority Score vs. Net Oil Rate**")
+            f_sc = fig_scatter(res, style_fig)
+            if f_sc is not None:
+                plot(f_sc, "dig_scatter")
+            st.caption("Bubble size represents gross rate. High score at lower net oil highlights mechanical loading rather than pure productivity.")
+
+        with sc_col2, st.container(border=True):
+            st.markdown("**Score Heatmap by Parameter**")
+            f_hm = fig_heatmap(res, style_fig)
+            if f_hm is not None:
+                plot(f_hm, "dig_heat")
+            st.caption("Normalized position of each well across individual parameter ranges.")
+
+        st.markdown("---")
+
+        # Box plots and Radar
+        bx_col1, bx_col2 = st.columns(2)
+        with bx_col1, st.container(border=True):
+            st.markdown("**Engineering Parameters Distribution by Tier**")
+            param_choice = st.selectbox(
+                "Select Parameter to Compare",
+                options=[("rod", "Rod Loaded (%)"), ("beam", "Beam Loading (%)"), ("gbx", "Gearbox Torque (%)"), ("nlap", "NLAP (m)"), ("gross", "Gross Rate (m³/d)"), ("net_oil", "Net Oil (m³/d)")],
+                format_func=lambda x: x[1],
+                key="analytics_box_param"
+            )[0]
+            fig_box = go.Figure()
+            for tech in TECH_ORDER:
+                sub = res[res["Recommendation"] == tech]
+                if not sub.empty and param_choice in sub.columns:
+                    fig_box.add_trace(go.Box(
+                        y=sub[param_choice],
+                        name=EMOJI.get(tech, tech),
+                        marker_color=COLORS.get(tech, "#9AA0A6")
+                    ))
+            fig_box.update_yaxes(title=param_choice.replace("_", " ").title())
+            plot(fig_box, key=f"analytics_box_{param_choice}")
+
+        with bx_col2, st.container(border=True):
+            st.markdown("**Well Radar Profile Comparison**")
+            ws = st.selectbox("Select Well for Radar Profile", sorted(res[res["Rank"].notna()]["Well"]), key="dig_radar_well") if meta["n_matrix"] else None
+            if ws:
+                f_rd = fig_radar(res, ws, style_fig)
+                if f_rd is not None:
+                    plot(f_rd, "dig_radar")
+            st.caption("Comparison against the median ranked well across all 6 parameters.")
+
+    # ── TAB 4: FINAL RECOMMENDATIONS ──────────────────────────────────────────
     with t4:
-        ws = st.selectbox("Well", sorted(res[res["Rank"].notna()]["Well"]), index=(sorted(res[res["Rank"].notna()]["Well"]).index(selected) if selected in set(res[res["Rank"].notna()]["Well"]) else 0), key="dig_radar_well") if meta["n_matrix"] else None
-        if ws:
-            f = fig_radar(res, ws, style_fig)
-            if f is not None:
-                with st.container(border=True):
-                    plot(f, "dig_radar")
-                st.caption("Each axis is the well's score as a share of the parameter's range, against the median ranked well.")
-    with t5:
-        render_selection_analytics(res, ui)
+        section("Final Recommendations & Actionable Deployment Table")
+        
+        # KPI Summary Cards
+        k_c1, k_c2, k_c3, k_c4 = st.columns(4)
+        k_c1.markdown(kpi("VSD Candidates", str(meta["n_vsd"]), "highest priority scores", tone="bad"), unsafe_allow_html=True)
+        k_c2.markdown(kpi("ROPC Candidates", str(meta["n_ropc"]), "next priority scores", tone="warn"), unsafe_allow_html=True)
+        k_c3.markdown(kpi("PT Sensors", str(n_pt), f"{meta['n_auto']} automatic + {meta['n_pt_matrix']} ranked", tone="good"), unsafe_allow_html=True)
+        k_c4.markdown(kpi("Not Assessed", str(len(all_wells) - meta["n_assessed"]), "stopped or no test", tone="neutral"), unsafe_allow_html=True)
 
-    section("Detailed table")
-    fl = st.multiselect("Show", ["VSD", "ROPC", "PT sensor", "Not assessed"], default=["VSD", "ROPC", "PT sensor"], key="dig_filter")
-    view = tbl[tbl["Recommendation"].isin([EMOJI[x] for x in fl])] if fl else tbl
-    table(view, column_config={"Total score": st.column_config.ProgressColumn("Total score", format="%.1f", min_value=10, max_value=80)})
-    d1, d2 = st.columns(2)
-    d1.download_button("⬇ Download table (CSV)", tbl.to_csv(index=False).encode("utf-8"), file_name="digitalization_priority.csv", mime="text/csv", key="dig_csv")
-    xb = _excel_bytes({"Priority": tbl, "Inputs": inputs.drop(columns=["dyno_text"], errors="ignore")})
-    if xb:
-        d2.download_button("⬇ Download Excel", xb, file_name="digitalization_priority.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dig_xlsx")
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    with st.expander("✍️ Fill or correct dynamometer values (rod loaded, beam loading, gearbox torque)"):
-        st.caption("Values here override the dynamometer text and the Echometer import. Leave blank to keep what was found. "
-                   "Rod loaded, beam loading and gearbox torque are all in %.")
-        pool = res[res["Rank"].notna() | ((res["Status"] == "RUNNING") & res["net_oil"].notna() & (res["net_oil"] > thr))]
-        only_gaps = st.checkbox("Only wells with a missing value", True, key="dig_only_gaps")
-        ed = pool[["Well", "goodman_pct", "beam_pct", "gbx_pct"]].copy()
-        if only_gaps:
-            ed = ed[ed[["goodman_pct", "beam_pct", "gbx_pct"]].isna().any(axis=1)]
-        ov = load_overrides(data_dir)
-        base_ov = ov.set_index("Well") if len(ov) else pd.DataFrame(columns=["goodman_pct", "beam_pct", "gbx_pct", "Note"])
-        show = pd.DataFrame({"Well": ed["Well"],
-                             "Found: rod loaded (%)": ed["goodman_pct"].values, "Found: beam (%)": ed["beam_pct"].values, "Found: gearbox (%)": ed["gbx_pct"].values,
-                             "Rod loaded (%)": [base_ov["goodman_pct"].get(w, np.nan) for w in ed["Well"]],
-                             "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]]})
-        edited = st.data_editor(show, hide_index=True, key="dig_editor", disabled=["Well", "Found: rod loaded (%)", "Found: beam (%)", "Found: gearbox (%)"], **ui.get("STRETCH", {}))
-        if st.button("💾 Save manual values", key="dig_save"):
-            new = pd.DataFrame({"Well": edited["Well"], "goodman_pct": edited["Rod loaded (%)"],
-                                "beam_pct": edited["Beam loading (%)"], "gbx_pct": edited["Gearbox torque (%)"], "Note": "manual"})
-            new = new.dropna(subset=["goodman_pct", "beam_pct", "gbx_pct"], how="all")
-            keep = ov[~ov["Well"].isin(edited["Well"])] if len(ov) else ov
-            out = pd.concat([keep, new], ignore_index=True)
-            try:
-                out.to_csv(os.path.join(data_dir, OVERRIDES_FILE), index=False)
-                st.success("Saved. The ranking updates now.")
-                st.rerun()
-            except OSError as exc:
-                st.error(f"Could not save: {exc}")
+        fl = st.multiselect("Filter Recommendations", ["VSD", "ROPC", "PT sensor", "Not assessed"], default=["VSD", "ROPC", "PT sensor"], key="dig_filter")
+        view = tbl[tbl["Recommendation"].isin([EMOJI[x] for x in fl])] if fl else tbl
+        table(view, column_config={"Total score": st.column_config.ProgressColumn("Total score", format="%.1f", min_value=10, max_value=80)})
+        
+        # Download buttons
+        d1, d2 = st.columns(2)
+        d1.download_button("⬇ Download Final Recommendations (CSV)", tbl.to_csv(index=False).encode("utf-8"), file_name="digitalization_recommendations.csv", mime="text/csv", key="dig_csv")
+        xb = _excel_bytes({"Priority Recommendations": tbl, "Inputs": inputs.drop(columns=["dyno_text"], errors="ignore")})
+        if xb:
+            d2.download_button("⬇ Download Excel Workbook", xb, file_name="digitalization_recommendations.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dig_xlsx")
 
-    with st.expander("Wells not assessed"):
-        na = res[res["Recommendation"] == "Not assessed"][["Well", "Status", "Reason", "last_test", "days_since_test"]].rename(columns={"last_test": "Last test", "days_since_test": "Days since test"})
-        table(na) if len(na) else st.caption("Every well was assessed.")
-    with st.expander("How the dynamometer values were found"):
-        src = res[res["Status"] == "RUNNING"][["Well", "goodman_pct", "beam_pct", "gbx_pct", "Data gaps", "dyno_sources", "dyno_text"]].rename(
-            columns={"goodman_pct": "Rod loaded (%)", "beam_pct": "Beam loading (%)", "gbx_pct": "Gearbox torque (%)", "Data gaps": "Missing (score filled)", "dyno_sources": "Source", "dyno_text": "Master text read"})
-        table(src)
-        st.caption("Order of preference: manual entry, numbers read from the master 'DYNAMOMETER TEST RESULTS' text, imported Echometer report. "
-                   "If a value was read wrongly from the text, correct it above.")
+        with st.expander("✍️ Fill or Correct Dynamometer Values (Manual Override)"):
+            st.caption("Values entered here override the dynamometer text and Echometer imports. Rod loaded, beam loading, and gearbox torque are in %.")
+            pool = res[res["Rank"].notna() | ((res["Status"] == "RUNNING") & res["net_oil"].notna() & (res["net_oil"] > thr))]
+            only_gaps = st.checkbox("Only wells with a missing value", True, key="dig_only_gaps")
+            ed = pool[["Well", "goodman_pct", "beam_pct", "gbx_pct"]].copy()
+            if only_gaps:
+                ed = ed[ed[["goodman_pct", "beam_pct", "gbx_pct"]].isna().any(axis=1)]
+            ov = load_overrides(data_dir)
+            base_ov = ov.set_index("Well") if len(ov) else pd.DataFrame(columns=["goodman_pct", "beam_pct", "gbx_pct", "Note"])
+            show = pd.DataFrame({"Well": ed["Well"],
+                                 "Found: rod loaded (%)": ed["goodman_pct"].values, "Found: beam (%)": ed["beam_pct"].values, "Found: gearbox (%)": ed["gbx_pct"].values,
+                                 "Rod loaded (%)": [base_ov["goodman_pct"].get(w, np.nan) for w in ed["Well"]],
+                                 "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]]})
+            edited = st.data_editor(show, hide_index=True, key="dig_editor", disabled=["Well", "Found: rod loaded (%)", "Found: beam (%)", "Found: gearbox (%)"], **ui.get("STRETCH", {}))
+            if st.button("💾 Save Manual Values", key="dig_save"):
+                new = pd.DataFrame({"Well": edited["Well"], "goodman_pct": edited["Rod loaded (%)"],
+                                    "beam_pct": edited["Beam loading (%)"], "gbx_pct": edited["Gearbox torque (%)"], "Note": "manual"})
+                new = new.dropna(subset=["goodman_pct", "beam_pct", "gbx_pct"], how="all")
+                keep = ov[~ov["Well"].isin(edited["Well"])] if len(ov) else ov
+                out = pd.concat([keep, new], ignore_index=True)
+                try:
+                    out.to_csv(os.path.join(data_dir, OVERRIDES_FILE), index=False)
+                    st.success("Saved successfully. The ranking is updating now.")
+                    st.rerun()
+                except OSError as exc:
+                    st.error(f"Could not save: {exc}")
 
-
-def render_selection_analytics(matrix_df: pd.DataFrame, ui: dict):
-    """Render advanced charts and visualizations to support artificial lift selection."""
-    ui["section"]("Artificial Lift Selection Analytics & Decision Support")
-    
-    if matrix_df.empty:
-        st.info("No matrix data available for analytics.")
-        return
-
-    # 1. High-level Metrics
-    col1, col2, col3, col4 = st.columns(4)
-    total_wells = len(matrix_df)
-    vsd_count = len(matrix_df[matrix_df["Recommendation"] == "VSD"])
-    ropc_count = len(matrix_df[matrix_df["Recommendation"] == "ROPC"])
-    pt_count = len(matrix_df[matrix_df["Recommendation"] == "PT sensor"])
-    
-    with col1:
-        st.markdown(ui["kpi"]("Assessed Wells", total_wells, "Active running wells", tone="neutral"), unsafe_allow_html=True)
-    with col2:
-        st.markdown(ui["kpi"]("VSD Candidates", vsd_count, f"{vsd_count/total_wells:.1%}" if total_wells else "0%", tone="bad"), unsafe_allow_html=True)
-    with col3:
-        st.markdown(ui["kpi"]("ROPC Candidates", ropc_count, f"{ropc_count/total_wells:.1%}" if total_wells else "0%", tone="warn"), unsafe_allow_html=True)
-    with col4:
-        st.markdown(ui["kpi"]("PT Sensor Candidates", pt_count, f"{pt_count/total_wells:.1%}" if total_wells else "0%", tone="good"), unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # 2. Scatter Plot: Net Oil vs Total Score color-coded by Recommendation
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.markdown("**Priority Score vs. Net Oil Rate**")
-        fig_scatter = go.Figure()
-        for tech in TECH_ORDER:
-            sub = matrix_df[matrix_df["Recommendation"] == tech]
-            if not sub.empty:
-                fig_scatter.add_trace(go.Scatter(
-                    x=sub["net_oil"],
-                    y=sub["Total score"],
-                    mode="markers",
-                    name=EMOJI.get(tech, tech),
-                    marker=dict(size=10, color=COLORS.get(tech, "#9AA0A6")),
-                    text=sub["Well"],
-                    hovertemplate="<b>%{text}</b><br>Net Oil: %{x:.1f} m³/d<br>Total Score: %{y:.1f}<extra></extra>"
-                ))
-        fig_scatter.update_xaxes(title="Net Oil Rate (m³/d)")
-        fig_scatter.update_yaxes(title="Total Priority Score")
-        ui["plot"](fig_scatter, key="analytics_score_vs_oil")
-
-    # 3. Technology Breakdown Donut Chart
-    with col_b:
-        st.markdown("**Recommendation Share**")
-        counts = matrix_df["Recommendation"].value_counts()
-        fig_pie = go.Figure(go.Pie(
-            labels=[EMOJI.get(t, t) for t in counts.index],
-            values=counts.values,
-            hole=0.4,
-            marker=dict(colors=[COLORS.get(t, "#9AA0A6") for t in counts.index])
-        ))
-        fig_pie.update_layout(margin=dict(l=20, r=20, t=20, b=20))
-        ui["plot"](fig_pie, key="analytics_tech_share")
-
-    st.markdown("---")
-
-    # 4. Engineering Parameters Distribution Box Plots
-    st.markdown("**Engineering Parameters Distribution by Recommendation Tier**")
-    param_choice = st.selectbox(
-        "Select Parameter to Compare",
-        options=[("rod", "Rod Loaded (%)"), ("beam", "Beam Loading (%)"), ("gbx", "Gearbox Torque (%)"), ("nlap", "NLAP (m)"), ("gross", "Gross Rate (m³/d)"), ("net_oil", "Net Oil (m³/d)")],
-        format_func=lambda x: x[1],
-        key="analytics_box_param"
-    )[0]
-
-    fig_box = go.Figure()
-    for tech in TECH_ORDER:
-        sub = matrix_df[matrix_df["Recommendation"] == tech]
-        if not sub.empty and param_choice in sub.columns:
-            fig_box.add_trace(go.Box(
-                y=sub[param_choice],
-                name=EMOJI.get(tech, tech),
-                marker_color=COLORS.get(tech, "#9AA0A6")
-            ))
-    fig_box.update_yaxes(title=param_choice.replace("_", " ").title())
-    ui["plot"](fig_box, key=f"analytics_box_{param_choice}")
+        with st.expander("Wells Not Assessed & Data Gaps"):
+            na = res[res["Recommendation"] == "Not assessed"][["Well", "Status", "Reason", "last_test", "days_since_test"]].rename(columns={"last_test": "Last test", "days_since_test": "Days since test"})
+            table(na) if len(na) else st.caption("Every well was successfully assessed.")
