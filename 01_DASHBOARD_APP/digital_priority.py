@@ -443,7 +443,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     tbl = detail_table(res, meta)
     n_pt = meta["n_auto"] + meta["n_pt_matrix"]
 
-    # 4-TAB WORKFLOW STRUCTURE (DASHBOARD IS TAB 1)
     t1, t2, t3, t4 = st.tabs([
         "📈 Dashboard & Analytics",
         "📋 Updated Data Set", 
@@ -451,7 +450,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
         "🏆 Final Recommendations"
     ])
 
-    # ── TAB 1: DASHBOARD & ANALYTICS ──────────────────────────────────────────
     with t1:
         st.markdown("### Executive Fleet Overview")
         
@@ -473,7 +471,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Visual Row 1: Funnel & Technology Share
         st.markdown("#### 🔄 Assessment Funnel & Technology Distribution")
         c_an1, c_an2 = st.columns([3, 2])
         with c_an1, st.container(border=True):
@@ -485,7 +482,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Visual Row 2: Scatter & Heatmap correlation
         st.markdown("#### 🎯 Multi-Parameter Correlation & Scoring Matrix")
         sc_col1, sc_col2 = st.columns(2)
         with sc_col1, st.container(border=True):
@@ -504,7 +500,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Visual Row 3: Deep dive profiles
         st.markdown("#### 📊 Detailed Engineering Profiles")
         sub_t1, sub_t2, sub_t3 = st.tabs(["🏆 Ranked Stacked Bars", "🔥 Parameter Breakdown", "🕸️ Individual Well Radar"])
         with sub_t1:
@@ -527,7 +522,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
                         plot(f_rd, "dig_radar")
                     st.caption("Comparison of well parameters against fleet median.")
 
-    # ── TAB 2: UPDATED DATA SET ───────────────────────────────────────────────
     with t2:
         section("Processed Operational Datasets & Inputs")
         st.caption("Live operational ingestion table incorporating well tests, NLAP fluid levels, and dynamometer results.")
@@ -546,7 +540,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
         d_csv1 = display_inputs.to_csv(index=False).encode("utf-8")
         st.download_button("⬇ Download Processed Dataset (CSV)", d_csv1, file_name="petrobel_operational_dataset.csv", mime="text/csv", key="download_dataset_csv")
 
-    # ── TAB 3: SELECTION CRITERIA ─────────────────────────────────────────────
     with t3:
         section("Artificial Lift & Digitalization Decision Framework")
         st.markdown("""
@@ -575,7 +568,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
         
         st.info(f"**Active Configuration:** Net Oil Threshold = {thr:g} m³/d | VSD Quota = {vsd}% | ROPC Quota = {ropc}% | Missing Data Handling = {miss}")
 
-    # ── TAB 4: FINAL RECOMMENDATIONS ──────────────────────────────────────────
     with t4:
         section("Actionable Deployment Recommendations")
         
@@ -610,7 +602,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
                                  "Found: rod loaded (%)": ed["goodman_pct"].values, "Found: beam (%)": ed["beam_pct"].values, "Found: gearbox (%)": ed["gbx_pct"].values,
                                  "Rod loaded (%)": [base_ov["goodman_pct"].get(w, np.nan) for w in ed["Well"]],
                                  "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], 
-                                 "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]])})
+                                 "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]]})
             edited = st.data_editor(show, hide_index=True, key="dig_editor", disabled=["Well", "Found: rod loaded (%)", "Found: beam (%)", "Found: gearbox (%)"], **ui.get("STRETCH", {}))
             if st.button("💾 Save Manual Values", key="dig_save"):
                 new = pd.DataFrame({"Well": edited["Well"], "goodman_pct": edited["Rod loaded (%)"],
