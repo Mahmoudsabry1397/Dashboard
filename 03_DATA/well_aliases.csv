@@ -1,0 +1,5 @@
+# Well-name aliases: a raw name found in the Excel files -> the standard well name of the Operation Mode sheet.
+# One pair per line, no quotes. Lines starting with # are ignored. Example (remove the leading #):
+# raw_name,standard_well
+# 112-0169,112-169
+raw_name,standard_well

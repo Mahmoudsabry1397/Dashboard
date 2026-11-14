@@ -1,0 +1,42 @@
+{
+  "updated_at": "2026-11-14T04:45:43",
+  "rows": 4990,
+  "wells": 109,
+  "columns": 251,
+  "sources": {
+    "Petrobel Cumulative DFL.xlsx": {
+      "rows_used": 4987,
+      "file_updated": "2026-11-14T04:45:35"
+    },
+    "Petrobel Wells Operation Mode.xlsx": {
+      "rows_used": 109,
+      "file_updated": "2026-11-14T04:45:35"
+    },
+    "DATABASE.xlsx": {
+      "rows_used": 108,
+      "file_updated": "2026-11-14T04:42:37"
+    },
+    "SRP Test Results.xlsx": {
+      "rows_used": 69,
+      "file_updated": "2026-11-14T04:45:26"
+    },
+    "Monthly.xlsx": {
+      "rows_used": 109,
+      "file_updated": "2026-11-14T04:45:21"
+    }
+  },
+  "review_rows_excluded": 3382,
+  "srp_tests": {
+    "added": 0,
+    "same_as_last_test": 68,
+    "already_added": 0,
+    "zero_rate_ignored": 1,
+    "test_date": "2026-11-13"
+  },
+  "unit_conversions": [
+    "DATABASE: gross <- 'RATE \nCM/D (ACTUAL)'",
+    "DATABASE: net <- 'NET OIL CM/D (ACTUAL)'",
+    "SRP: gross <- 'ACT , M3/D'",
+    "SRP: net <- 'ACT NET '"
+  ]
+}
