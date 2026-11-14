@@ -480,84 +480,40 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     tbl = detail_table(res, meta)
 
     n_pt = meta["n_auto"] + meta["n_pt_matrix"]
-    k = st.columns(5)
-    k[0].markdown(kpi("Running wells", str(meta["n_running"]), f"of {len(all_wells)} wells"), unsafe_allow_html=True)
-    k[1].markdown(kpi("VSD candidates", str(meta["n_vsd"]), "highest priority scores", tone="bad"), unsafe_allow_html=True)
-    k[2].markdown(kpi("ROPC candidates", str(meta["n_ropc"]), "next priority scores", tone="warn"), unsafe_allow_html=True)
-    k[3].markdown(kpi("PT sensors", str(n_pt), f"{meta['n_auto']} automatic + {meta['n_pt_matrix']} ranked"), unsafe_allow_html=True)
-    k[4].markdown(kpi("Not assessed", str(len(all_wells) - meta["n_assessed"]), "stopped, no data or no test"), unsafe_allow_html=True)
-    if selected in set(res["Well"]):
-        r = res[res["Well"] == selected].iloc[0]
-        st.markdown(f"**Selected well {selected}:** {EMOJI[r['Recommendation']]}" + (f", rank {int(r['Rank'])} of {meta['n_matrix']} with score {r['Total score']:.1f}" if pd.notna(r["Rank"]) else f" ({r['Reason']})"))
-    if meta["unavailable"]:
-        st.warning("No ranked well has a value for: " + ", ".join(meta["unavailable"]) + ". That parameter adds nothing to the ranking until values are added "
-                   "below (manual entry) or Echometer reports are imported.")
-    if meta["n_matrix"] == 0:
-        st.info("No running well is above the net-oil threshold, so there is nothing to rank.")
 
     # ════════════════════════════════════════════════════════════════════════════
-    # REORGANIZED 4-TAB WORKFLOW STRUCTURE
+    # REORGANIZED 4-TAB WORKFLOW STRUCTURE (DASHBOARD IS NOW TAB 1)
     # ════════════════════════════════════════════════════════════════════════════
     t1, t2, t3, t4 = st.tabs([
+        "📈 Dashboard & Analytics",
         "📋 Updated Data Set", 
         "⚙️ Selection Criteria", 
-        "📈 Dashboard & Analytics", 
         "🏆 Final Recommendations"
     ])
 
-    # ── TAB 1: UPDATED DATA SET ───────────────────────────────────────────────
+    # ── TAB 1: DASHBOARD & ANALYTICS (NOW FIRST) ──────────────────────────────
     with t1:
-        section("Processed Operational Data & Inputs")
-        st.caption("Complete dataset of active and running wells incorporating well tests, NLAP fluid levels, and dynamometer results.")
-        
-        # Display summary counts for data view
-        d1_col1, d1_col2, d1_col3 = st.columns(3)
-        d1_col1.metric("Total Wells Tracked", len(inputs))
-        d1_col2.metric("Running Wells", int(inputs["Status"].eq("RUNNING").sum()))
-        d1_col3.metric("Wells with Valid Net Oil", int(inputs["net_oil"].notna().sum()))
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Clean view of inputs dataframe
-        display_inputs = inputs[["Well", "Status", "last_test", "net_oil", "gross", "nlap", "goodman_pct", "beam_pct", "gbx_pct", "dyno_sources"]].copy()
-        display_inputs.columns = ["Well", "Status", "Last Test Date", "Net Oil (m³/d)", "Gross Rate (m³/d)", "NLAP (m)", "Rod Loaded (%)", "Beam Loading (%)", "Gearbox Torque (%)", "Dynamometer Source"]
-        table(display_inputs)
-        
-        d_csv1 = display_inputs.to_csv(index=False).encode("utf-8")
-        st.download_button("⬇ Download Updated Dataset (CSV)", d_csv1, file_name="updated_operational_dataset.csv", mime="text/csv", key="download_dataset_csv")
-
-    # ── TAB 2: SELECTION CRITERIA ─────────────────────────────────────────────
-    with t2:
-        section("Artificial Lift & Digitalization Selection Criteria")
-        st.markdown("""
-        The priority scoring and technology selection framework uses a rigorous multi-parameter assessment model for artificial lift and sensor deployment:
-
-        1. **Operational Filtering:**
-           * Only **RUNNING** wells are assessed. Stopped wells or wells with no operational data are automatically bypassed.
-           * **Automatic PT Sensor Rule:** Any running well whose latest test net oil is **at or below the threshold** ($\le$ threshold, default $4\text{ m}^3/\text{d} \approx 25\text{ BOPD}$) receives a **PT Sensor** automatically.
-
-        2. **Priority Matrix Scoring (0 to 10 scale per parameter):**
-           Wells above the net-oil threshold are scored relative to the distribution of all matrix wells (lowest value = bottom of range, highest value = top of range, linear interpolation in between):
-           * **Net Oil Rate:** Scored from **10 to 30 points** (higher productivity = higher priority).
-           * **Gross Rate:** Scored from **0 to 10 points**.
-           * **NLAP (Fluid Level):** Scored from **0 to 10 points**.
-           * **Rod Loaded % (Goodman):** Scored from **0 to 10 points**.
-           * **Beam Loading %:** Scored from **0 to 10 points**.
-           * **Gearbox Torque %:** Scored from **0 to 10 points**.
-           * **Total Score:** Sum of all 6 parameters (Max possible score = 80).
-
-        3. **Recommendation Tiers:**
-           * **VSD Candidates:** Top share of ranked wells (default top 30%).
-           * **ROPC Candidates:** Next share of ranked wells (default next 30%).
-           * **PT Sensors (Matrix):** Remaining ranked wells (default remaining 40%).
-        """)
-        
-        st.info(f"**Current Settings Active:** Threshold = {thr:g} m³/d | VSD Share = {vsd}% | ROPC Share = {ropc}% | Missing Data Policy = {miss}")
-
-    # ── TAB 3: DASHBOARD & ANALYTICS ──────────────────────────────────────────
-    with t3:
         section("Decision Support Analytics & Visualizations")
         st.caption("Interactive charts illustrating the workflow distribution, score correlation, and engineering parameter ranges.")
+
+        # KPI Summary Cards at the top of Dashboard
+        k = st.columns(5)
+        k[0].markdown(kpi("Running wells", str(meta["n_running"]), f"of {len(all_wells)} wells"), unsafe_allow_html=True)
+        k[1].markdown(kpi("VSD candidates", str(meta["n_vsd"]), "highest priority scores", tone="bad"), unsafe_allow_html=True)
+        k[2].markdown(kpi("ROPC candidates", str(meta["n_ropc"]), "next priority scores", tone="warn"), unsafe_allow_html=True)
+        k[3].markdown(kpi("PT sensors", str(n_pt), f"{meta['n_auto']} automatic + {meta['n_pt_matrix']} ranked"), unsafe_allow_html=True)
+        k[4].markdown(kpi("Not assessed", str(len(all_wells) - meta["n_assessed"]), "stopped, no data or no test"), unsafe_allow_html=True)
+
+        if selected in set(res["Well"]):
+            r = res[res["Well"] == selected].iloc[0]
+            st.markdown(f"**Selected well {selected}:** {EMOJI[r['Recommendation']]}" + (f", rank {int(r['Rank'])} of {meta['n_matrix']} with score {r['Total score']:.1f}" if pd.notna(r["Rank"]) else f" ({r['Reason']})"))
+        if meta["unavailable"]:
+            st.warning("No ranked well has a value for: " + ", ".join(meta["unavailable"]) + ". That parameter adds nothing to the ranking until values are added "
+                       "below (manual entry) or Echometer reports are imported.")
+        if meta["n_matrix"] == 0:
+            st.info("No running well is above the net-oil threshold, so there is nothing to rank.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
 
         # Top row: Sankey and Donut
         c_an1, c_an2 = st.columns([3, 2])
@@ -586,42 +542,81 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("---")
 
-        # Box plots and Radar
-        bx_col1, bx_col2 = st.columns(2)
-        with bx_col1, st.container(border=True):
-            st.markdown("**Engineering Parameters Distribution by Tier**")
-            param_choice = st.selectbox(
-                "Select Parameter to Compare",
-                options=[("rod", "Rod Loaded (%)"), ("beam", "Beam Loading (%)"), ("gbx", "Gearbox Torque (%)"), ("nlap", "NLAP (m)"), ("gross", "Gross Rate (m³/d)"), ("net_oil", "Net Oil (m³/d)")],
-                format_func=lambda x: x[1],
-                key="analytics_box_param"
-            )[0]
-            fig_box = go.Figure()
-            for tech in TECH_ORDER:
-                sub = res[res["Recommendation"] == tech]
-                if not sub.empty and param_choice in sub.columns:
-                    fig_box.add_trace(go.Box(
-                        y=sub[param_choice],
-                        name=EMOJI.get(tech, tech),
-                        marker_color=COLORS.get(tech, "#9AA0A6")
-                    ))
-            fig_box.update_yaxes(title=param_choice.replace("_", " ").title())
-            plot(fig_box, key=f"analytics_box_{param_choice}")
-
-        with bx_col2, st.container(border=True):
-            st.markdown("**Well Radar Profile Comparison**")
+        # Box plots and Sub-tabs for ranking/heatmap/radar
+        st.markdown("#### Detailed Ranking & Profiles")
+        sub_t1, sub_t2, sub_t3 = st.tabs(["🏆 Ranking Bar Chart", "🔥 Score Heatmap", "🕸️ Well Radar Profile"])
+        with sub_t1:
+            f_rk = fig_ranking(res, style_fig, meta)
+            if f_rk is not None:
+                with st.container(border=True):
+                    plot(f_rk, "dig_rank")
+                st.caption("Each bar is the total score, split by parameter. Dotted lines mark where VSD ends and ROPC ends.")
+        with sub_t2:
+            f_hm2 = fig_heatmap(res, style_fig)
+            if f_hm2 is not None:
+                with st.container(border=True):
+                    plot(f_hm2, "dig_heat_2")
+                st.caption("Colour shows position inside each parameter's own range.")
+        with sub_t3:
             ws = st.selectbox("Select Well for Radar Profile", sorted(res[res["Rank"].notna()]["Well"]), key="dig_radar_well") if meta["n_matrix"] else None
             if ws:
                 f_rd = fig_radar(res, ws, style_fig)
                 if f_rd is not None:
-                    plot(f_rd, "dig_radar")
-            st.caption("Comparison against the median ranked well across all 6 parameters.")
+                    with st.container(border=True):
+                        plot(f_rd, "dig_radar")
+                    st.caption("Comparison against the median ranked well across all 6 parameters.")
+
+    # ── TAB 2: UPDATED DATA SET ───────────────────────────────────────────────
+    with t2:
+        section("Processed Operational Data & Inputs")
+        st.caption("Complete dataset of active and running wells incorporating well tests, NLAP fluid levels, and dynamometer results.")
+        
+        d1_col1, d1_col2, d1_col3 = st.columns(3)
+        d1_col1.metric("Total Wells Tracked", len(inputs))
+        d1_col2.metric("Running Wells", int(inputs["Status"].eq("RUNNING").sum()))
+        d1_col3.metric("Wells with Valid Net Oil", int(inputs["net_oil"].notna().sum()))
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        display_inputs = inputs[["Well", "Status", "last_test", "net_oil", "gross", "nlap", "goodman_pct", "beam_pct", "gbx_pct", "dyno_sources"]].copy()
+        display_inputs.columns = ["Well", "Status", "Last Test Date", "Net Oil (m³/d)", "Gross Rate (m³/d)", "NLAP (m)", "Rod Loaded (%)", "Beam Loading (%)", "Gearbox Torque (%)", "Dynamometer Source"]
+        table(display_inputs)
+        
+        d_csv1 = display_inputs.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇ Download Updated Dataset (CSV)", d_csv1, file_name="updated_operational_dataset.csv", mime="text/csv", key="download_dataset_csv")
+
+    # ── TAB 3: SELECTION CRITERIA ─────────────────────────────────────────────
+    with t3:
+        section("Artificial Lift & Digitalization Selection Criteria")
+        st.markdown("""
+        The priority scoring and technology selection framework uses a rigorous multi-parameter assessment model for artificial lift and sensor deployment:
+
+        1. **Operational Filtering:**
+           * Only **RUNNING** wells are assessed. Stopped wells or wells with no operational data are automatically bypassed.
+           * **Automatic PT Sensor Rule:** Any running well whose latest test net oil is **at or below the threshold** ($\le$ threshold, default $4\text{ m}^3/\text{d} \approx 25\text{ BOPD}$) receives a **PT Sensor** automatically.
+
+        2. **Priority Matrix Scoring (0 to 10 scale per parameter):**
+           Wells above the net-oil threshold are scored relative to the distribution of all matrix wells (lowest value = bottom of range, highest value = top of range, linear interpolation in between):
+           * **Net Oil Rate:** Scored from **10 to 30 points** (higher productivity = higher priority).
+           * **Gross Rate:** Scored from **0 to 10 points**.
+           * **NLAP (Fluid Level):** Scored from **0 to 10 points**.
+           * **Rod Loaded % (Goodman):** Scored from **0 to 10 points**.
+           * **Beam Loading %:** Scored from **0 to 10 points**.
+           * **Gearbox Torque %:** Scored from **0 to 10 points**.
+           * **Total Score:** Sum of all 6 parameters (Max possible score = 80).
+
+        3. **Recommendation Tiers:**
+           * **VSD Candidates:** Top share of ranked wells (default top 30%).
+           * **ROPC Candidates:** Next share of ranked wells (default next 30%).
+           * **PT Sensors (Matrix):** Remaining ranked wells (default remaining 40%).
+        """)
+        
+        st.info(f"**Current Settings Active:** Threshold = {thr:g} m³/d | VSD Share = {vsd}% | ROPC Share = {ropc}% | Missing Data Policy = {miss}")
 
     # ── TAB 4: FINAL RECOMMENDATIONS ──────────────────────────────────────────
     with t4:
         section("Final Recommendations & Actionable Deployment Table")
         
-        # KPI Summary Cards
         k_c1, k_c2, k_c3, k_c4 = st.columns(4)
         k_c1.markdown(kpi("VSD Candidates", str(meta["n_vsd"]), "highest priority scores", tone="bad"), unsafe_allow_html=True)
         k_c2.markdown(kpi("ROPC Candidates", str(meta["n_ropc"]), "next priority scores", tone="warn"), unsafe_allow_html=True)
@@ -634,7 +629,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
         view = tbl[tbl["Recommendation"].isin([EMOJI[x] for x in fl])] if fl else tbl
         table(view, column_config={"Total score": st.column_config.ProgressColumn("Total score", format="%.1f", min_value=10, max_value=80)})
         
-        # Download buttons
         d1, d2 = st.columns(2)
         d1.download_button("⬇ Download Final Recommendations (CSV)", tbl.to_csv(index=False).encode("utf-8"), file_name="digitalization_recommendations.csv", mime="text/csv", key="dig_csv")
         xb = _excel_bytes({"Priority Recommendations": tbl, "Inputs": inputs.drop(columns=["dyno_text"], errors="ignore")})
@@ -653,7 +647,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             show = pd.DataFrame({"Well": ed["Well"],
                                  "Found: rod loaded (%)": ed["goodman_pct"].values, "Found: beam (%)": ed["beam_pct"].values, "Found: gearbox (%)": ed["gbx_pct"].values,
                                  "Rod loaded (%)": [base_ov["goodman_pct"].get(w, np.nan) for w in ed["Well"]],
-                                 "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]]})
+                                 "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]])})
             edited = st.data_editor(show, hide_index=True, key="dig_editor", disabled=["Well", "Found: rod loaded (%)", "Found: beam (%)", "Found: gearbox (%)"], **ui.get("STRETCH", {}))
             if st.button("💾 Save Manual Values", key="dig_save"):
                 new = pd.DataFrame({"Well": edited["Well"], "goodman_pct": edited["Rod loaded (%)"],
