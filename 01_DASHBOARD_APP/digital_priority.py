@@ -385,6 +385,35 @@ def fig_scatter(d: pd.DataFrame, style_fig):
     fig.update_layout(xaxis_title="Net oil, last test (BOPD)", yaxis_title="Total priority score")
     return style_fig(fig, 420, legend=True)
 
+def fig_tech_comparison(d: pd.DataFrame, style_fig):
+    m = d[d["Rank"].notna()]
+    if m.empty:
+        return None
+    agg_data = []
+    labels = [lbl for _, lbl, *_ in PARAMS]
+    for t in TECH_ORDER:
+        sub = m[m["Recommendation"] == t]
+        if sub.empty:
+            continue
+        row = {"Recommendation": t}
+        for key, label, lo, hi in PARAMS:
+            row[label] = sub[f"s_{key}"].mean()
+        agg_data.append(row)
+    if not agg_data:
+        return None
+    df_agg = pd.DataFrame(agg_data)
+    
+    fig = go.Figure()
+    for t in TECH_ORDER:
+        sub_df = df_agg[df_agg["Recommendation"] == t]
+        if sub_df.empty:
+            continue
+        vals = [float(sub_df[lbl].values[0]) if lbl in sub_df.columns and not pd.isna(sub_df[lbl].values[0]) else 0.0 for lbl in labels]
+        fig.add_bar(name=t, x=labels, y=vals, marker_color=COLORS[t])
+    
+    fig.update_layout(barmode="group", yaxis_title="Average Parameter Score", xaxis_title="Engineering Parameter")
+    return style_fig(fig, 420, legend=True)
+
 def fig_radar(d: pd.DataFrame, well: str, style_fig):
     m = d[d["Rank"].notna()]
     if m.empty or well not in set(m["Well"]):
@@ -482,7 +511,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown("#### 🎯 Multi-Parameter Correlation & Scoring Matrix")
+        st.markdown("#### 🎯 Multi-Parameter Correlation & Technology Drivers")
         sc_col1, sc_col2 = st.columns(2)
         with sc_col1, st.container(border=True):
             st.markdown("**Priority Score vs. Net Oil Rate**")
@@ -492,11 +521,11 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             st.caption("Bubble size indicates gross rate. High score at low net oil highlights mechanical stress.")
 
         with sc_col2, st.container(border=True):
-            st.markdown("**Normalized Parameter Heatmap**")
-            f_hm = fig_heatmap(res, style_fig)
-            if f_hm is not None:
-                plot(f_hm, "dig_heat")
-            st.caption("Well-by-well relative score distribution across all 6 engineering parameters.")
+            st.markdown("**Average Parameter Scores by Tier**")
+            f_tc = fig_tech_comparison(res, style_fig)
+            if f_tc is not None:
+                plot(f_tc, "dig_tech_comp")
+            st.caption("Grouped bar comparison showing average parameter score for VSD, ROPC, and PT Sensor tiers.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
