@@ -496,7 +496,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
         section("Decision Support Analytics & Visualizations")
         st.caption("Interactive charts illustrating the workflow distribution, score correlation, and engineering parameter ranges.")
 
-        # KPI Summary Cards at the top of Dashboard
         k = st.columns(5)
         k[0].markdown(kpi("Running wells", str(meta["n_running"]), f"of {len(all_wells)} wells"), unsafe_allow_html=True)
         k[1].markdown(kpi("VSD candidates", str(meta["n_vsd"]), "highest priority scores", tone="bad"), unsafe_allow_html=True)
@@ -515,7 +514,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Top row: Sankey and Donut
         c_an1, c_an2 = st.columns([3, 2])
         with c_an1, st.container(border=True):
             plot(fig_sankey(res, meta, len(all_wells), style_fig), "dig_sankey")
@@ -524,7 +522,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("---")
 
-        # Scatter plot and Heatmap
         sc_col1, sc_col2 = st.columns(2)
         with sc_col1, st.container(border=True):
             st.markdown("**Priority Score vs. Net Oil Rate**")
@@ -542,7 +539,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("---")
 
-        # Box plots and Sub-tabs for ranking/heatmap/radar
         st.markdown("#### Detailed Ranking & Profiles")
         sub_t1, sub_t2, sub_t3 = st.tabs(["🏆 Ranking Bar Chart", "🔥 Score Heatmap", "🕸️ Well Radar Profile"])
         with sub_t1:
@@ -647,7 +643,8 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             show = pd.DataFrame({"Well": ed["Well"],
                                  "Found: rod loaded (%)": ed["goodman_pct"].values, "Found: beam (%)": ed["beam_pct"].values, "Found: gearbox (%)": ed["gbx_pct"].values,
                                  "Rod loaded (%)": [base_ov["goodman_pct"].get(w, np.nan) for w in ed["Well"]],
-                                 "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]])})
+                                 "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], 
+                                 "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]]})
             edited = st.data_editor(show, hide_index=True, key="dig_editor", disabled=["Well", "Found: rod loaded (%)", "Found: beam (%)", "Found: gearbox (%)"], **ui.get("STRETCH", {}))
             if st.button("💾 Save Manual Values", key="dig_save"):
                 new = pd.DataFrame({"Well": edited["Well"], "goodman_pct": edited["Rod loaded (%)"],
