@@ -50,16 +50,16 @@ PARAM_COLORS = {"net_oil": "#2F80ED", "gross": "#CE1141", "nlap": "#1F7A8C", "ro
 # ══════════════════════════════════════════════════════════════════════════════
 # Parameter names, tolerant of spelling and punctuation: "Rod Loaded", "rod loding", "Rods load", "G.B Torque loaded", "GB torque", "Gear box load", "Beam loading"
 _LOAD = r"(?:l[o0]a?d(?:ed|ing|ng|s)?|l[o0]d(?:ed|ing)?)"
-_ROD = [r"rods?[\s.\-:]*(?:string[\s.\-:]*)?" + _LOAD + r"", r"goodman(?:[\s.\-:]*(?:diagram|ratio|" + _LOAD + r"))?"]
-_BEAM = [r"beam[\s.\-:]*(?:" + _LOAD + r")?"]
-_GBX = [r"(?:g\s*[./\-]?\s*b\.?|gear\s*-?\s*box|gbx|g/box)[\s.\-:]*(?:(?:torque|trq|tq)[\s.\-:]*)?(?:" + _LOAD + r")?",
-        r"(?:torque|trq)[\s.\-:]*" + _LOAD + r""]
+_ROD = [r"\brods?\b[\s.\-:]*(?:string[\s.\-:]*)?" + _LOAD + r"\b", r"\bgoodman\b(?:[\s.\-:]*(?:diagram|ratio|" + _LOAD + r"))?"]
+_BEAM = [r"\bbeam\b[\s.\-:]*(?:" + _LOAD + r")?"]
+_GBX = [r"(?:\bg\s*[./\-]?\s*b\b\.?|\bgear\s*-?\s*box\b|\bgbx\b|\bg/box\b)[\s.\-:]*(?:(?:torque|trq|tq)\b[\s.\-:]*)?(?:" + _LOAD + r")?",
+        r"\b(?:torque|trq)\b[\s.\-:]*" + _LOAD + r"\b"]
 # what may sit between a name and its number: "Rod Loaded : 85 %", "Beam loading = ~60", "G.B Torque loaded (72%)", "up to 80"
-_SEP = r"(?:[\s:=\-.,;|/>(\[{~≈±]|loaded|loading|load|torque|stress|max|maximum|value|ratio|is|at|of|about|around|approx\.?|approximately|near|nearly|up|to|percent|pct|%)*?"
+_SEP = r"(?:[\s:=\-.,;|/>(\[{~\u2248\u00b1]|loaded|loading|load|torque|stress|max|maximum|value|ratio|is|at|of|about|around|approx\.?|approximately|near|nearly|up|to|percent|pct|%)*?"
 _NUM = r"(\d+(?:\.\d+)?)"
-_UNIT = r"\s*(%|pct|percent|psi|kn|lbs?|kg)?"
+_UNIT = r"\s*(%|pct\b|percent\b|psi\b|kn\b|lbs?\b|kg\b)?"
 _NOT_PCT = {"psi", "kn", "lb", "lbs", "kg"}
-_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩٫٬٪％ –—−",
+_DIGITS = str.maketrans("\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669\u066b\u066c\u066a\uff05\u00a0\u2013\u2014\u2212",
                         "0123456789.,%% ---")
 
 
@@ -108,7 +108,7 @@ def _wkey(x) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(x).upper())
 
 
-_MENTION = r"rods?\s*[.\-:]*\s*l[o0]|beam\s*[.\-:]*\s*l[o0]|g\s*[./\-]?\s*b\.?\s*(?:torque|l[o0])|gear\s*-?\s*box\s*(?:torque|l[o0])"
+_MENTION = r"rods?\s*[.\-:]*\s*l[o0]|beam\s*[.\-:]*\s*l[o0]|g\s*[./\-]?\s*b\b\.?\s*(?:torque|l[o0])|gear\s*-?\s*box\s*(?:torque|l[o0])"
 
 
 def _dyno_columns(df: pd.DataFrame, primary) -> list:
@@ -609,7 +609,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
         table(src)
         st.caption("Order of preference: manual entry, numbers read from the master 'DYNAMOMETER TEST RESULTS' text, imported Echometer report. "
                    "If a value was read wrongly from the text, correct it above.")
-
 
 
 def render_selection_analytics(matrix_df: pd.DataFrame, ui: dict):
