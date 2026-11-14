@@ -473,28 +473,6 @@ def fig_gearbox_box(d: pd.DataFrame, style_fig):
     fig.update_layout(yaxis_title="Gearbox Torque Loading (%)", xaxis_title="Artificial Lift Tier")
     return style_fig(fig, 420, legend=False)
 
-def fig_test_freshness(d: pd.DataFrame, style_fig):
-    m = d[d["days_since_test"].notna()]
-    if m.empty:
-        return None
-    fig = go.Figure()
-    fig.add_histogram(x=m["days_since_test"], marker_color="#1F7A8C", nbinsx=20)
-    fig.update_layout(xaxis_title="Days Since Last Well Test", yaxis_title="Number of Wells")
-    return style_fig(fig, 420, legend=False)
-
-def fig_score_distribution(d: pd.DataFrame, style_fig):
-    m = d[d["Total score"].notna()]
-    if m.empty:
-        return None
-    fig = go.Figure()
-    for t in TECH_ORDER:
-        sub = m[m["Recommendation"] == t]
-        if sub.empty:
-            continue
-        fig.add_histogram(x=sub["Total score"], name=t, marker_color=COLORS[t], opacity=0.8)
-    fig.update_layout(barmode="overlay", xaxis_title="Total Priority Score", yaxis_title="Count")
-    return style_fig(fig, 420, legend=True)
-
 def fig_radar(d: pd.DataFrame, well: str, style_fig):
     m = d[d["Rank"].notna()]
     if m.empty or well not in set(m["Well"]):
@@ -643,24 +621,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             if f_gb is not None:
                 plot(f_gb, "dig_gearbox_box")
             st.caption("Box plot distribution of gearbox torque ratings across artificial lift tiers.")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        st.markdown("#### 📅 Data Freshness & Priority Score Spread")
-        dt_col1, dt_col2 = st.columns(2)
-        with dt_col1, st.container(border=True):
-            st.markdown("**Well Test Data Freshness (Days Since Last Test)**")
-            f_tf = fig_test_freshness(res, style_fig)
-            if f_tf is not None:
-                plot(f_tf, "dig_test_fresh")
-            st.caption("Histogram tracking test data recency across the monitored fleet.")
-
-        with dt_col2, st.container(border=True):
-            st.markdown("**Total Priority Score Distribution by Tier**")
-            f_sd = fig_score_distribution(res, style_fig)
-            if f_sd is not None:
-                plot(f_sd, "dig_score_dist")
-            st.caption("Overlaid distribution of total priority scores across recommendation tiers.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
