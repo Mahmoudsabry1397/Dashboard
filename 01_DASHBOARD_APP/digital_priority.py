@@ -571,7 +571,7 @@ def check_authentication():
                 if submit:
                     users = {
                         "WFRD": {"password": "2026", "role": "Admin", "name": "Weatherford Administrator"},
-                        "Petrobel2026": {"password": "1726", "role": "Operator", "name": "Petrobel Operator"}
+                        "Petrobel": {"password": "Petrobel", "role": "Operator", "name": "Petrobel Operator"}
                     }
                     
                     if username in users and users[username]["password"] == password:
@@ -708,7 +708,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 2. Detailed Engineering Profiles (Moved immediately up right after funnel)
+        # 2. Detailed Engineering Profiles (Positioned directly below the funnel)
         st.markdown("#### 📊 Detailed Engineering Profiles")
         sub_t1, sub_t2, sub_t3 = st.tabs(["🏆 Ranked Stacked Bars", "🔥 Parameter Breakdown", "🕸️ Individual Well Radar"])
         with sub_t1:
@@ -733,7 +733,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 3. Multi-Parameter Correlation & Technology Drivers (Moved down)
+        # 3. Multi-Parameter Correlation & Technology Drivers (Lower section)
         st.markdown("#### 🎯 Multi-Parameter Correlation & Technology Drivers")
         sc_col1, sc_col2 = st.columns(2)
         with sc_col1, st.container(border=True):
@@ -752,7 +752,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 4. Production Dynamics & Downhole Fluid Level Analysis (Moved down)
+        # 4. Production Dynamics & Downhole Fluid Level Analysis (Lower section)
         st.markdown("#### 📉 Production Dynamics & Downhole Fluid Level Analysis")
         pr_col1, pr_col2 = st.columns(2)
         with pr_col1, st.container(border=True):
@@ -771,7 +771,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 5. Mechanical Stress & Operational Risk Analytics (Moved down)
+        # 5. Mechanical Stress & Operational Risk Analytics (Lower section)
         st.markdown("#### ⚙️ Mechanical Stress & Operational Risk Analytics")
         mech_col1, mech_col2 = st.columns(2)
         with mech_col1, st.container(border=True):
