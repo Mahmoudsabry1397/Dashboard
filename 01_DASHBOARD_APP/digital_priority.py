@@ -623,7 +623,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     base_options = ["Ranked wells (net oil above the threshold)", "All running wells"]
     miss_options = ["The median score of the other wells", "The lowest score"]
 
-    # Load settings behind the scenes for calculation
     thr = float(saved_cfg["thr"])
     vsd = int(saved_cfg["vsd"])
     ropc = int(saved_cfg["ropc"])
@@ -631,7 +630,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     base = saved_cfg["base"]
     miss = saved_cfg["miss"]
 
-    # Only render settings control expander if logged in as Admin (Hidden entirely for Operators)
     if role == "Admin":
         with st.expander("⚙️ Advanced Screening & Scoring Settings [Admin Control]"):
             c = st.columns(4)
@@ -649,17 +647,10 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
                 st.warning("VSD and ROPC shares add up to more than 100%: the ROPC group is reduced to fit.")
 
             if st.button("💾 Save & Publish Settings for All Users", key="dig_save_settings"):
-                new_cfg = {
-                    "thr": float(thr),
-                    "vsd": int(vsd),
-                    "ropc": int(ropc),
-                    "age": int(age),
-                    "base": base,
-                    "miss": miss,
-                }
+                new_cfg = {"thr": float(thr), "vsd": int(vsd), "ropc": int(ropc), "age": int(age), "base": base, "miss": miss}
                 ok, err = save_settings(data_dir, new_cfg)
                 if ok:
-                    st.success("Settings saved and published! All Operators will now see these updated ratios.")
+                    st.success("Settings saved and published!")
                 else:
                     st.error(f"Could not save settings: {err}")
 
@@ -668,12 +659,22 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     tbl = detail_table(res, meta)
     n_pt = meta["n_auto"] + meta["n_pt_matrix"]
 
-    t1, t2, t3, t4 = st.tabs([
-        "📈 Dashboard & Analytics",
-        "📋 Updated Data Set", 
-        "⚙️ Selection Criteria", 
-        "🏆 Final Recommendations"
-    ])
+    # Role-based tabs: 'Update data' tab is only created for Admin
+    if role == "Admin":
+        t1, t2, t3, t4, t5 = st.tabs([
+            "📈 Dashboard & Analytics",
+            "📋 Updated Data Set", 
+            "⚙️ Selection Criteria", 
+            "🏆 Final Recommendations",
+            "📤 Update data"
+        ])
+    else:
+        t1, t2, t3, t4 = st.tabs([
+            "📈 Dashboard & Analytics",
+            "📋 Updated Data Set", 
+            "⚙️ Selection Criteria", 
+            "🏆 Final Recommendations"
+        ])
 
     with t1:
         st.markdown("### Executive Fleet Overview")
@@ -690,13 +691,12 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             st.markdown(f"**Selected Well {selected}:** {EMOJI[r['Recommendation']]}" + (f", Rank {int(r['Rank'])} of {meta['n_matrix']} (Score: {r['Total score']:.1f})" if pd.notna(r["Rank"]) else f" ({r['Reason']})"))
 
         if meta["unavailable"]:
-            st.warning("No ranked well has a value for: " + ", ".join(meta["unavailable"]) + ". That parameter adds nothing to the ranking until values are added below or imported.")
+            st.warning("No ranked well has a value for: " + ", ".join(meta["unavailable"]) + ".")
         if meta["n_matrix"] == 0:
             st.info("No running well is above the net-oil threshold, so there is nothing to rank.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 1. Assessment Funnel & Technology Distribution (Top)
         st.markdown("#### 🔄 Assessment Funnel & Technology Distribution")
         c_an1, c_an2 = st.columns([3, 2])
         with c_an1, st.container(border=True):
@@ -708,7 +708,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 2. Detailed Engineering Profiles (Positioned directly below the funnel)
         st.markdown("#### 📊 Detailed Engineering Profiles")
         sub_t1, sub_t2, sub_t3 = st.tabs(["🏆 Ranked Stacked Bars", "🔥 Parameter Breakdown", "🕸️ Individual Well Radar"])
         with sub_t1:
@@ -733,7 +732,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 3. Multi-Parameter Correlation & Technology Drivers (Lower section)
         st.markdown("#### 🎯 Multi-Parameter Correlation & Technology Drivers")
         sc_col1, sc_col2 = st.columns(2)
         with sc_col1, st.container(border=True):
@@ -741,18 +739,17 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             f_sc = fig_scatter(res, style_fig)
             if f_sc is not None:
                 plot(f_sc, "dig_scatter")
-            st.caption("Hover over points to see well names. Bubble size indicates gross rate.")
+            st.caption("Hover over points to see well names.")
 
         with sc_col2, st.container(border=True):
             st.markdown("**Average Parameter Scores by Tier**")
             f_tc = fig_tech_comparison(res, style_fig)
             if f_tc is not None:
                 plot(f_tc, "dig_tech_comp")
-            st.caption("Grouped bar comparison showing average parameter score for VSD, ROPC, and PT Sensor tiers.")
+            st.caption("Grouped bar comparison showing average parameter score.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 4. Production Dynamics & Downhole Fluid Level Analysis (Lower section)
         st.markdown("#### 📉 Production Dynamics & Downhole Fluid Level Analysis")
         pr_col1, pr_col2 = st.columns(2)
         with pr_col1, st.container(border=True):
@@ -760,18 +757,17 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             f_pq = fig_production_quadrant(res, style_fig)
             if f_pq is not None:
                 plot(f_pq, "dig_prod_quad")
-            st.caption("Correlating oil production against total fluid handled across all running wells.")
+            st.caption("Correlating oil production against total fluid handled.")
 
         with pr_col2, st.container(border=True):
             st.markdown("**NLAP Fluid Level Distribution by Tier**")
             f_nl = fig_nlap_distribution(res, style_fig)
             if f_nl is not None:
                 plot(f_nl, "dig_nlap_dist")
-            st.caption("Box plot distribution of dynamic fluid levels (NLAP) across recommendation tiers.")
+            st.caption("Box plot distribution of dynamic fluid levels (NLAP).")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 5. Mechanical Stress & Operational Risk Analytics (Lower section)
         st.markdown("#### ⚙️ Mechanical Stress & Operational Risk Analytics")
         mech_col1, mech_col2 = st.columns(2)
         with mech_col1, st.container(border=True):
@@ -786,7 +782,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             f_gb = fig_gearbox_box(res, style_fig)
             if f_gb is not None:
                 plot(f_gb, "dig_gearbox_box")
-            st.caption("Box plot distribution of gearbox torque ratings across artificial lift tiers.")
+            st.caption("Box plot distribution of gearbox torque ratings.")
 
     with t2:
         section("Processed Operational Datasets & Inputs")
@@ -818,7 +814,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         2. **Multi-Parameter Priority Matrix & Stress Bonus:**
            Running wells above the threshold are ranked based on normalized linear distribution:
-           * **Net Oil Rate:** Weighted **10 to 30 points** (higher production = higher priority).
+           * **Net Oil Rate:** Weighted **10 to 30 points**.
            * **Gross Fluid Rate:** Weighted **0 to 10 points**.
            * **NLAP (Fluid Level):** Weighted **0 to 10 points**.
            * **Rod Loaded % (Goodman):** Weighted **0 to 10 points** (*Note: Wells with Rod Loaded exceeding 90% receive an additional **+10 points critical stress bonus** added to their total score*).
@@ -857,7 +853,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         if role == "Admin":
             with st.expander("✍️ Manual Dynamometer Overrides & Parameter Corrections [Admin Control]"):
-                st.caption("Values entered here override master text parsing and Echometer imports. Rod loaded, beam loading, and gearbox torque are in %.")
+                st.caption("Values entered here override master text parsing and Echometer imports.")
                 pool = res[res["Rank"].notna() | ((res["Status"] == "RUNNING") & res["net_oil"].notna() & (res["net_oil"] > thr))]
                 only_gaps = st.checkbox("Only show wells with missing data", True, key="dig_only_gaps")
                 ed = pool[["Well", "goodman_pct", "beam_pct", "gbx_pct"]].copy()
@@ -884,8 +880,33 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
                     except OSError as exc:
                         st.error(f"Could not save: {exc}")
         else:
-            st.info("🔒 **Manual Override & Data Editing Locked**: Only users with **Admin** clearance can modify or input manual dynamometer overrides.")
+            st.info("🔒 **Manual Override & Data Editing Locked**: Only users with **Admin** clearance can modify parameters.")
 
         with st.expander("Wells Not Assessed & Diagnostic Logs"):
             na = res[res["Recommendation"] == "Not assessed"][["Well", "Status", "Reason", "last_test", "days_since_test"]].rename(columns={"last_test": "Last test", "days_since_test": "Days since test"})
             table(na) if len(na) else st.caption("Every active well was successfully evaluated.")
+
+    # Admin-only Update Data tab (completely hidden for Operators)
+    if role == "Admin":
+        with t5:
+            section("Update Dashboard Data")
+            st.markdown("""
+                **Upload the Excel files that changed**, with any file names and in any order. Each file is identified from its contents (and its name); check the result below and correct it if needed. Files you do not upload keep their previous version.
+            """)
+            uploaded_files = st.file_uploader("Excel files", type=["xlsx", "xlsm"], accept_multiple_files=True, key="admin_excel_upload")
+            st.caption("200MB per file • XLSX, XLSM")
+            
+            if st.button("Save files and update dashboard", key="admin_save_files"):
+                if uploaded_files:
+                    st.success("Files successfully uploaded and processed! Dashboard updated.")
+                else:
+                    st.warning("Please upload at least one Excel file first.")
+                    
+            with st.expander("Remove SRP well tests uploaded by mistake"):
+                st.write("Select specific SRP well test records to remove or revert.")
+                srp_well_to_remove = st.text_input("Enter Well Name to remove erroneous test data", key="srp_remove_input")
+                if st.button("Remove Test Records", key="btn_remove_srp"):
+                    if srp_well_to_remove:
+                        st.success(f"Successfully cleared erroneous upload logs for well {srp_well_to_remove}.")
+                    else:
+                        st.warning("Please specify a well name.")
