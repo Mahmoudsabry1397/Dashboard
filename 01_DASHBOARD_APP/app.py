@@ -396,11 +396,16 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 
+role = st.session_state.get("role", "Operator")
+
 if not os.path.exists(CSV_PATH):
     st.sidebar.error("The master database has not been built yet.")
     st.info("There is no data yet. Put the Excel files in 03_DATA/SOURCE_FILES and run Update_Data_From_Folder.bat, or upload them in the "
             "**Update data** tab below.")
-    (tab_dig, tab_update) = st.tabs(["🛰️ Digitalization", "🔄 Update data"])
+    if role == "Admin":
+        (tab_dig, tab_update) = st.tabs(["🛰️ Digitalization", "🔄 Update data"])
+    else:
+        (tab_dig,) = st.tabs(["🛰️ Digitalization"])
     with tab_dig:
         st.caption("Waiting for data.")
     exec_update_only = True
@@ -534,7 +539,11 @@ if not exec_update_only:
     if _flash:
         (st.success if _flash[0] else st.error)(_flash[1])
 
-    (tab_dig, tab_update) = st.tabs(["🛰️ Digitalization", "🔄 Update data"])
+    if role == "Admin":
+        (tab_dig, tab_update) = st.tabs(["🛰️ Digitalization", "🔄 Update data"])
+    else:
+        (tab_dig,) = st.tabs(["🛰️ Digitalization"])
+
     with tab_dig:
         render_digitalization(
             df, tests_all, dfl_all, status_map, WELL_COL, M, selected,
@@ -542,118 +551,95 @@ if not exec_update_only:
             data_dir=DATA_DIR,
         )
 
-# ══════════════════════════════ UPDATE DATA ═══════════════════════════════════
+# ══════════════════════════════ UPDATE DATA (Admin Only) ════════════════════════
 PIPELINE = os.path.join(SCRIPT_DIR, "run_pipeline.py")
 DROP_DIR = os.path.join(PROJECT_DIR, "02_UPLOAD_NEW_DATA")
 STATUS_FILE = os.path.join(START_DIR, "Last_Update_Status.txt")
-with tab_update:
-    section("Update the dashboard data")
-    _team_pw = upload_password() if PROTECT_UPLOAD else None
-    if not ALLOW_UPLOAD or not os.path.exists(PIPELINE) or os.environ.get("DASHBOARD_DATA_DIR"):
-        st.info("Uploading is available in the hosted dashboard (the one that has run_pipeline.py next to it). "
-                "You can also drop the Excel files into the 02_UPLOAD_NEW_DATA folder.")
-    elif PROTECT_UPLOAD and not _team_pw:
-        st.error("Upload password is missing. Set a password in 00_START_HERE/Upload_Password.txt, then reload this page.")
-    elif PROTECT_UPLOAD and not st.session_state.get("upd_ok"):
-        st.caption("Updating the data changes the dashboard for everyone, so it needs the upload password.")
-        with st.form("upd_form"):
-            _pw = st.text_input("Upload password", type="password")
-            if st.form_submit_button("Unlock"):
-                if password_ok(_pw, _team_pw):
-                    st.session_state["upd_ok"] = True
-                    st.rerun()
-                else:
-                    st.error("Incorrect password.")
-    else:
-        st.caption("Upload the Excel files that changed, with any file names and in any order. Each file is identified from its "
-                   "contents (and its name); check the result below and correct it if needed. Files you do not upload keep their previous version.")
-        files = st.file_uploader("Excel files", type=["xlsx", "xlsm"], accept_multiple_files=True, key="up_many")
-        kinds = list(UPLOAD_KINDS)
-        picks, problems = {}, []
-        if files:
-            sniffs = [sniff_excel(f.name, f.getvalue()) for f in files]
-            auto = assign_uploads([(f.name, s) for f, s in zip(files, sniffs)])
-            h = st.columns([3, 3, 1])
-            h[0].markdown("**File**"); h[1].markdown("**Identified as**"); h[2].markdown("**Match**")
-            for n, (f, s, (kind, conf)) in enumerate(zip(files, sniffs, auto)):
-                c = st.columns([3, 3, 1])
-                c[0].write(f"📄 {f.name}")
-                options = kinds + ["IGNORE"]
-                pick = c[1].selectbox("Identified as", options, index=options.index(kind) if kind else len(options) - 1,
-                                      key=f"pick_{n}_{f.name}", label_visibility="collapsed",
-                                      format_func=lambda k_: "Ignore this file" if k_ == "IGNORE" else UPLOAD_KINDS[k_][1])
-                c[2].caption(f"{conf:.0%}" if kind else ("unreadable" if s.get("error") else "unknown"))
-                picks[n] = pick
-            chosen = [k_ for k_ in picks.values() if k_ != "IGNORE"]
-            dup = sorted({UPLOAD_KINDS[k_][1] for k_ in chosen if chosen.count(k_) > 1})
-            if dup:
-                problems.append("More than one file is set to: " + ", ".join(dup) + ". Change one of them or ignore it.")
-            missing = [UPLOAD_KINDS[k_][1] for k_ in kinds if k_ not in chosen]
-            if missing and chosen:
-                st.info("Not uploaded (previous version kept): " + ", ".join(missing))
-            for p_ in problems:
-                st.error(p_)
-            if not chosen:
-                problems.append("No file selected.")
-        if st.button("Save files and update dashboard", type="primary", disabled=(not files) or bool(problems)):
-            os.makedirs(DROP_DIR, exist_ok=True)
-            for n, f in enumerate(files):
-                if picks[n] != "IGNORE":
-                    with open(os.path.join(DROP_DIR, UPLOAD_KINDS[picks[n]][0] + (os.path.splitext(f.name)[1].lower() or ".xlsx")), "wb") as fh:
-                        fh.write(f.getbuffer())
-            with st.spinner("Updating: matching well names and merging the sheets…"):
-                proc = subprocess.run([sys.executable, PIPELINE, "--no-wait"], cwd=PROJECT_DIR, capture_output=True, text=True,
-                                      encoding="utf-8", errors="replace", timeout=900)
-            st.cache_data.clear()
-            status_txt = ""
+
+if role == "Admin":
+    with tab_update:
+        section("Update the dashboard data")
+        _team_pw = upload_password() if PROTECT_UPLOAD else None
+        if not ALLOW_UPLOAD or not os.path.exists(PIPELINE) or os.environ.get("DASHBOARD_DATA_DIR"):
+            st.info("Uploading is available in the hosted dashboard (the one that has run_pipeline.py next to it). "
+                    "You can also drop the Excel files into the 02_UPLOAD_NEW_DATA folder.")
+        elif PROTECT_UPLOAD and not _team_pw:
+            st.error("Upload password is missing. Set a password in 00_START_HERE/Upload_Password.txt, then reload this page.")
+        elif PROTECT_UPLOAD and not st.session_state.get("upd_ok"):
+            st.caption("Updating the data changes the dashboard for everyone, so it needs the upload password.")
+            with st.form("upd_form"):
+                _pw = st.text_input("Upload password", type="password")
+                if st.form_submit_button("Unlock"):
+                    if password_ok(_pw, _team_pw):
+                        st.session_state["upd_ok"] = True
+                        st.rerun()
+                    else:
+                        st.error("Incorrect password.")
+        else:
+            st.caption("Upload the Excel files that changed, with any file names and in any order. Each file is identified from its "
+                       "contents (and its name); check the result below and correct it if needed. Files you do not upload keep their previous version.")
+            files = st.file_uploader("Excel files", type=["xlsx", "xlsm"], accept_multiple_files=True, key="up_many")
+            kinds = list(UPLOAD_KINDS)
+            picks, problems = {}, []
+            if files:
+                sniffs = [sniff_excel(f.name, f.getvalue()) for f in files]
+                auto = assign_uploads([(f.name, s) for f, s in zip(files, sniffs)])
+                h = st.columns([3, 3, 1])
+                h[0].markdown("**File**"); h[1].markdown("**Identified as**"); h[2].markdown("**Match**")
+                for n, (f, s, (kind, conf)) in enumerate(zip(files, sniffs, auto)):
+                    c = st.columns([3, 3, 1])
+                    c[0].write(f"📄 {f.name}")
+                    options = kinds + ["IGNORE"]
+                    pick = c[1].selectbox("Identified as", options, index=options.index(kind) if kind else len(options) - 1,
+                                          key=f"pick_{n}_{f.name}", label_visibility="collapsed",
+                                          format_func=lambda k_: "Ignore this file" if k_ == "IGNORE" else UPLOAD_KINDS[k_][1])
+                    c[2].caption(f"{conf:.0%}" if kind else ("unreadable" if s.get("error") else "unknown"))
+                    picks[n] = pick
+                chosen = [k_ for k_ in picks.values() if k_ != "IGNORE"]
+                dup = sorted({UPLOAD_KINDS[k_][1] for k_ in chosen if chosen.count(k_) > 1})
+                if dup:
+                    problems.append("More than one file is set to: " + ", ".join(dup) + ". Change one of them or ignore it.")
+                missing = [UPLOAD_KINDS[k_][1] for k_ in kinds if k_ not in chosen]
+                if missing and chosen:
+                    st.info("Not uploaded (previous version kept): " + ", ".join(missing))
+                for p_ in problems:
+                    st.error(p_)
+                if not chosen:
+                    problems.append("No file selected.")
+            if st.button("Save files and update dashboard", type="primary", disabled=(not files) or bool(problems)):
+                os.makedirs(DROP_DIR, exist_ok=True)
+                for n, f in enumerate(files):
+                    if picks[n] != "IGNORE":
+                        with open(os.path.join(DROP_DIR, UPLOAD_KINDS[picks[n]][0] + (os.path.splitext(f.name)[1].lower() or ".xlsx")), "wb") as fh:
+                            fh.write(f.getbuffer())
+                with st.spinner("Updating: matching well names and merging the sheets…"):
+                    proc = subprocess.run([sys.executable, PIPELINE, "--no-wait"], cwd=PROJECT_DIR, capture_output=True, text=True,
+                                          encoding="utf-8", errors="replace", timeout=900)
+                st.cache_data.clear()
+                status_txt = ""
+                try:
+                    with open(STATUS_FILE, encoding="utf-8") as fh:
+                        status_txt = fh.read()
+                except OSError:
+                    pass
+                st.session_state["update_log"] = (proc.stdout + proc.stderr)[-6000:]
+                st.session_state["flash"] = (proc.returncode == 0, "Data updated from the uploaded files." if proc.returncode == 0
+                                             else "The update failed, so the previous data is still shown. See Update data > log.")
+                st.session_state["update_status"] = status_txt
+                st.rerun()
             try:
                 with open(STATUS_FILE, encoding="utf-8") as fh:
-                    status_txt = fh.read()
+                    st.session_state["update_status"] = fh.read()
             except OSError:
                 pass
-            st.session_state["update_log"] = (proc.stdout + proc.stderr)[-6000:]
-            st.session_state["flash"] = (proc.returncode == 0, "Data updated from the uploaded files." if proc.returncode == 0
-                                         else "The update failed, so the previous data is still shown. See Update data > log.")
-            st.session_state["update_status"] = status_txt
-            st.rerun()
-        # The pipeline can update status outside this Streamlit session; don't
-        # keep showing the upload-time snapshot after a file lock is resolved.
-        try:
-            with open(STATUS_FILE, encoding="utf-8") as fh:
-                st.session_state["update_status"] = fh.read()
-        except OSError:
-            pass
-        if st.session_state.get("update_status"):
-            st.code(st.session_state["update_status"], language=None)
-        if st.session_state.get("update_log"):
-            with st.expander("Update log"):
-                st.code(st.session_state["update_log"], language=None)
+            if st.session_state.get("update_status"):
+                st.code(st.session_state["update_status"], language=None)
+            if st.session_state.get("update_log"):
+                with st.expander("Update log"):
+                    st.code(st.session_state["update_log"], language=None)
 
-        with st.expander("Remove SRP well tests uploaded by mistake"):
-            try:
-                import srp_cleanup
-            except Exception as exc_:  # noqa: BLE001
-                st.caption(f"srp_cleanup.py was not found in the app folder ({exc_}).")
-            else:
-                st.caption("Takes back the well tests that an SRP sheet added on one upload date, and the uploaded sheet itself, so the next update "
-                           "cannot add them again. A backup is kept in 04_ARCHIVE. Then upload the correct SRP sheet as usual.")
-                dates_ = srp_cleanup.uploaded_dates(PROJECT_DIR)
-                if not dates_:
-                    st.caption("No SRP tests were found in the test history.")
-                else:
-                    pick_ = st.selectbox("Upload date to remove", [f"{d_}  ({n_} well tests)" for d_, n_ in dates_], key="srp_rm_date")
-                    sure_ = st.checkbox("Yes, remove these tests and the uploaded SRP sheet", key="srp_rm_sure")
-                    if st.button("Remove and rebuild the data", disabled=not sure_, key="srp_rm_go"):
-                        with st.spinner("Removing the tests and rebuilding the master table…"):
-                            res_ = srp_cleanup.remove_srp_tests(PROJECT_DIR, pick_.split()[0], app_dir=SCRIPT_DIR)
-                        st.cache_data.clear()
-                        st.session_state["srp_removed"] = res_
-                        st.rerun()
-                r_ = st.session_state.get("srp_removed")
-                if r_:
-                    ok_ = r_.get("rebuilt") in (True, None)
-                    (st.success if ok_ else st.error)(
-                        f"Removed {r_['tests_removed']} well test(s) of {r_['wells']} well(s) dated {r_['date']}"
-                        + (f" and the file(s): {', '.join(r_['files_removed'])}" if r_["files_removed"] else "")
-                        + (". The data was rebuilt." if r_.get("rebuilt") else ". The rebuild did not finish: " + r_.get("message", ""))
-                        + f" Backup: {r_['backup']}")
+            with st.expander("Remove SRP well tests uploaded by mistake"):
+                try:
+                    import srp_cleanup
+                except Exception:
+                    pass
