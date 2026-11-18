@@ -659,7 +659,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     tbl = detail_table(res, meta)
     n_pt = meta["n_auto"] + meta["n_pt_matrix"]
 
-    # Role-based tabs: 'Update data' tab is completely omitted for Operators
+    # Role-based tabs: Strictly 4 tabs for Operator, 5 tabs for Admin
     if role == "Admin":
         t1, t2, t3, t4, t5 = st.tabs([
             "📈 Dashboard & Analytics",
@@ -709,7 +709,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 2. Detailed Engineering Profiles (Positioned immediately below the funnel)
+        # 2. Detailed Engineering Profiles
         st.markdown("#### 📊 Detailed Engineering Profiles")
         sub_t1, sub_t2, sub_t3 = st.tabs(["🏆 Ranked Stacked Bars", "🔥 Parameter Breakdown", "🕸️ Individual Well Radar"])
         with sub_t1:
@@ -734,7 +734,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 3. Multi-Parameter Correlation & Technology Drivers (Lower section)
+        # 3. Multi-Parameter Correlation & Technology Drivers
         st.markdown("#### 🎯 Multi-Parameter Correlation & Technology Drivers")
         sc_col1, sc_col2 = st.columns(2)
         with sc_col1, st.container(border=True):
@@ -753,7 +753,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 4. Production Dynamics & Downhole Fluid Level Analysis (Lower section)
+        # 4. Production Dynamics & Downhole Fluid Level Analysis
         st.markdown("#### 📉 Production Dynamics & Downhole Fluid Level Analysis")
         pr_col1, pr_col2 = st.columns(2)
         with pr_col1, st.container(border=True):
@@ -772,7 +772,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 5. Mechanical Stress & Operational Risk Analytics (Lower section)
+        # 5. Mechanical Stress & Operational Risk Analytics
         st.markdown("#### ⚙️ Mechanical Stress & Operational Risk Analytics")
         mech_col1, mech_col2 = st.columns(2)
         with mech_col1, st.container(border=True):
@@ -891,7 +891,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             na = res[res["Recommendation"] == "Not assessed"][["Well", "Status", "Reason", "last_test", "days_since_test"]].rename(columns={"last_test": "Last test", "days_since_test": "Days since test"})
             table(na) if len(na) else st.caption("Every active well was successfully evaluated.")
 
-    # Admin-only Update Data tab (completely hidden and absent for Operators)
+    # Admin-only Update Data tab block (completely absent for Operator role)
     if role == "Admin":
         with t5:
             section("Update Dashboard Data")
