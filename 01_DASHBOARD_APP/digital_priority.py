@@ -623,6 +623,14 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     base_options = ["Ranked wells (net oil above the threshold)", "All running wells"]
     miss_options = ["The median score of the other wells", "The lowest score"]
 
+    # Load settings for calculation regardless of role
+    thr = float(saved_cfg["thr"])
+    vsd = int(saved_cfg["vsd"])
+    ropc = int(saved_cfg["ropc"])
+    age = int(saved_cfg["age"])
+    base = saved_cfg["base"]
+    miss = saved_cfg["miss"]
+
     if role == "Admin":
         with st.expander("⚙️ Advanced Screening & Scoring Settings [Admin Control]"):
             c = st.columns(4)
@@ -653,27 +661,6 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
                     st.success("Settings saved and published! All Operators will now see these updated ratios.")
                 else:
                     st.error(f"Could not save settings: {err}")
-    else:
-        thr = float(saved_cfg["thr"])
-        vsd = int(saved_cfg["vsd"])
-        ropc = int(saved_cfg["ropc"])
-        age = int(saved_cfg["age"])
-        base = saved_cfg["base"]
-        miss = saved_cfg["miss"]
-        pt_share = max(0, 100 - vsd - ropc)
-
-        with st.expander("ℹ️ Active Screening & Scoring Ratios [Operator View - Read Only]"):
-            st.markdown(f"""
-            - **Automatic PT Sensor Threshold:** `{thr:g} m³/d` (≈ `{thr * BBL:,.0f}` BOPD)
-            - **VSD Quota (Top Share):** `{vsd}%` of ranked wells
-            - **ROPC Quota (Next Share):** `{ropc}%` of ranked wells
-            - **PT Sensor Quota (Remaining):** `{pt_share}%` (Balance)
-            - **Ignore Tests Older Than:** `{age} days` {"(disabled)" if age == 0 else ""}
-            - **Base Evaluation Pool:** `{base}`
-            - **Missing Data Policy:** `{miss}`
-            
-            *Note: Only users logged in under the **Admin** role (`WFRD`) are authorized to modify these criteria.*
-            """)
 
     inputs = collect_inputs(all_wells, status_map, tests_all, dfl_all, df, M, wellcol, data_dir)
     res, meta = build_priority(inputs, thr, vsd, ropc, "running" if base.startswith("All") else "matrix", "median" if miss.startswith("The median") else "lowest", age)
