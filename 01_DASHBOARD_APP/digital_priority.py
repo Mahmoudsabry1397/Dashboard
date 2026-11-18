@@ -659,7 +659,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     tbl = detail_table(res, meta)
     n_pt = meta["n_auto"] + meta["n_pt_matrix"]
 
-    # Role-based tabs: Strictly 4 tabs for Operator, 5 tabs for Admin
+    # --- ABSOLUTE ROLE-BASED TAB GENERATION ---
     if role == "Admin":
         t1, t2, t3, t4, t5 = st.tabs([
             "📈 Dashboard & Analytics",
@@ -675,6 +675,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             "⚙️ Selection Criteria", 
             "🏆 Final Recommendations"
         ])
+        t5 = None  # Completely nonexistent for operators
 
     with t1:
         st.markdown("### Executive Fleet Overview")
@@ -870,7 +871,7 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
                                      "Found: rod loaded (%)": ed["goodman_pct"].values, "Found: beam (%)": ed["beam_pct"].values, "Found: gearbox (%)": ed["gbx_pct"].values,
                                      "Rod loaded (%)": [base_ov["goodman_pct"].get(w, np.nan) for w in ed["Well"]],
                                      "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], 
-                                     "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]]})
+                                     "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]])}
                 edited = st.data_editor(show, hide_index=True, key="dig_editor", disabled=["Well", "Found: rod loaded (%)", "Found: beam (%)", "Found: gearbox (%)"], **ui.get("STRETCH", {}))
                 if st.button("💾 Save Manual Values", key="dig_save"):
                     new = pd.DataFrame({"Well": edited["Well"], "goodman_pct": edited["Rod loaded (%)"],
@@ -891,8 +892,8 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
             na = res[res["Recommendation"] == "Not assessed"][["Well", "Status", "Reason", "last_test", "days_since_test"]].rename(columns={"last_test": "Last test", "days_since_test": "Days since test"})
             table(na) if len(na) else st.caption("Every active well was successfully evaluated.")
 
-    # Admin-only Update Data tab block (completely absent for Operator role)
-    if role == "Admin":
+    # Strictly Admin-only Update Data tab (guaranteed absent for Operator role)
+    if role == "Admin" and t5 is not None:
         with t5:
             section("Update Dashboard Data")
             st.markdown("""
