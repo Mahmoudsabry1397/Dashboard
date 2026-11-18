@@ -499,7 +499,68 @@ def _excel_bytes(sheets: dict) -> bytes | None:
     except Exception:
         return None
 
+def check_authentication():
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+        st.session_state["username"] = ""
+        st.session_state["role"] = ""
+        st.session_state["name"] = ""
+
+    if not st.session_state["authenticated"]:
+        st.markdown("""
+            <div style="max-width: 420px; margin: 4rem auto; padding: 2.5rem; background: #FFFFFF; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); border: 1px solid #E2E8F0;">
+                <h3 style="margin-top:0; color: #1A1A1A; text-align: center; font-weight: 700;">🔐 Petrobel Command Center</h3>
+                <p style="color: #64748B; font-size: 0.9rem; text-align: center; margin-bottom: 1.5rem;">Secure Authentication Portal</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        _, col_center, _ = st.columns([1, 2, 1])
+        with col_center:
+            with st.form("login_form"):
+                username = st.text_input("Username", placeholder="Enter username")
+                password = st.text_input("Password", type="password", placeholder="Enter password")
+                submit = st.form_submit_button("Sign In securely", use_container_width=True)
+                
+                if submit:
+                    # Updated custom users dictionary
+                    users = {
+                        "WFRD": {"password": "2026", "role": "Admin", "name": "Weatherford Administrator"},
+                        "Petrobel2026": {"password": "1726", "role": "Operator", "name": "Petrobel Operator"}
+                    }
+                    
+                    if username in users and users[username]["password"] == password:
+                        st.session_state["authenticated"] = True
+                        st.session_state["username"] = username
+                        st.session_state["role"] = users[username]["role"]
+                        st.session_state["name"] = users[username]["name"]
+                        st.success(f"Welcome, {users[username]['name']}!")
+                        st.rerun()
+                    else:
+                        st.error("Invalid username or password. Please try again.")
+        st.stop()
+
 def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, selected, ui, data_dir):
+    # Enforce Authentication check
+    check_authentication()
+
+    role = st.session_state.get("role", "Operator")
+    name = st.session_state.get("name", "User")
+    
+    st.sidebar.markdown(f"""
+        <div style="padding: 0.8rem; background: #F1F5F9; border-radius: 8px; margin-bottom: 1rem;">
+            <div style="font-size: 0.85rem; color: #64748B;">Signed in as:</div>
+            <div style="font-weight: 600; color: #1E293B; font-size: 0.95rem;">{name}</div>
+            <div style="margin-top: 0.3rem;"><span style="background: {'#CE1141' if role == 'Admin' else '#1F7A8C'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">{role}</span></div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if st.sidebar.button("🚪 Sign Out", use_container_width=True):
+        st.session_state["authenticated"] = False
+        st.session_state["username"] = ""
+        st.session_state["role"] = ""
+        st.session_state["name"] = ""
+        st.rerun()
+
     kpi, section, plot, table, style_fig = ui["kpi"], ui["section"], ui["plot"], ui["table"], ui["style_fig"]
     
     st.markdown("""
@@ -513,18 +574,23 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
     all_wells = sorted({str(w) for w in df[wellcol].dropna().astype(str)})
 
-    with st.expander("⚙️ Advanced Screening & Scoring Settings"):
-        c = st.columns(4)
-        thr = c[0].number_input("Automatic PT sensor at or below (net oil, m³/d)", 0.0, 100.0, 4.0, 0.5, key="dig_thr")
-        c[0].caption(f"≈ {thr * BBL:,.0f} BOPD")
-        vsd = c[1].number_input("VSD: top share of ranked wells (%)", 0, 100, 30, 5, key="dig_vsd")
-        ropc = c[2].number_input("ROPC: next share (%)", 0, 100, 30, 5, key="dig_ropc")
-        age = c[3].number_input("Ignore tests older than (days, 0 = never)", 0, 1000, 0, 30, key="dig_age")
-        c2 = st.columns(2)
-        base = c2[0].radio("Shares are taken of", ["Ranked wells (net oil above the threshold)", "All running wells"], key="dig_base")
-        miss = c2[1].radio("A well with a missing dynamometer value gets", ["The median score of the other wells", "The lowest score"], key="dig_miss")
-        if vsd + ropc > 100:
-            st.warning("VSD and ROPC shares add up to more than 100%: the ROPC group is reduced to fit.")
+    if role == "Admin":
+        with st.expander("⚙️ Advanced Screening & Scoring Settings [Admin Control]"):
+            c = st.columns(4)
+            thr = c[0].number_input("Automatic PT sensor at or below (net oil, m³/d)", 0.0, 100.0, 4.0, 0.5, key="dig_thr")
+            c[0].caption(f"≈ {thr * BBL:,.0f} BOPD")
+            vsd = c[1].number_input("VSD: top share of ranked wells (%)", 0, 100, 30, 5, key="dig_vsd")
+            ropc = c[2].number_input("ROPC: next share (%)", 0, 100, 30, 5, key="dig_ropc")
+            age = c[3].number_input("Ignore tests older than (days, 0 = never)", 0, 1000, 0, 30, key="dig_age")
+            c2 = st.columns(2)
+            base = c2[0].radio("Shares are taken of", ["Ranked wells (net oil above the threshold)", "All running wells"], key="dig_base")
+            miss = c2[1].radio("A well with a missing dynamometer value gets", ["The median score of the other wells", "The lowest score"], key="dig_miss")
+            if vsd + ropc > 100:
+                st.warning("VSD and ROPC shares add up to more than 100%: the ROPC group is reduced to fit.")
+    else:
+        thr, vsd, ropc, age = 4.0, 30, 30, 0
+        base, miss = "Ranked wells (net oil above the threshold)", "The median score of the other wells"
+        st.sidebar.info("ℹ️ **Operator Mode**: Screening settings and weight percentages are managed by Administrators.")
 
     inputs = collect_inputs(all_wells, status_map, tests_all, dfl_all, df, M, wellcol, data_dir)
     res, meta = build_priority(inputs, thr, vsd, ropc, "running" if base.startswith("All") else "matrix", "median" if miss.startswith("The median") else "lowest", age)
@@ -713,33 +779,36 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
         if xb:
             d2.download_button("⬇ Download Excel Workbook", xb, file_name="digitalization_recommendations.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dig_xlsx")
 
-        with st.expander("✍️ Manual Dynamometer Overrides & Parameter Corrections"):
-            st.caption("Values entered here override master text parsing and Echometer imports. Rod loaded, beam loading, and gearbox torque are in %.")
-            pool = res[res["Rank"].notna() | ((res["Status"] == "RUNNING") & res["net_oil"].notna() & (res["net_oil"] > thr))]
-            only_gaps = st.checkbox("Only show wells with missing data", True, key="dig_only_gaps")
-            ed = pool[["Well", "goodman_pct", "beam_pct", "gbx_pct"]].copy()
-            if only_gaps:
-                ed = ed[ed[["goodman_pct", "beam_pct", "gbx_pct"]].isna().any(axis=1)]
-            ov = load_overrides(data_dir)
-            base_ov = ov.set_index("Well") if len(ov) else pd.DataFrame(columns=["goodman_pct", "beam_pct", "gbx_pct", "Note"])
-            show = pd.DataFrame({"Well": ed["Well"],
-                                 "Found: rod loaded (%)": ed["goodman_pct"].values, "Found: beam (%)": ed["beam_pct"].values, "Found: gearbox (%)": ed["gbx_pct"].values,
-                                 "Rod loaded (%)": [base_ov["goodman_pct"].get(w, np.nan) for w in ed["Well"]],
-                                 "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], 
-                                 "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]]})
-            edited = st.data_editor(show, hide_index=True, key="dig_editor", disabled=["Well", "Found: rod loaded (%)", "Found: beam (%)", "Found: gearbox (%)"], **ui.get("STRETCH", {}))
-            if st.button("💾 Save Manual Values", key="dig_save"):
-                new = pd.DataFrame({"Well": edited["Well"], "goodman_pct": edited["Rod loaded (%)"],
-                                    "beam_pct": edited["Beam loading (%)"], "gbx_pct": edited["Gearbox torque (%)"], "Note": "manual"})
-                new = new.dropna(subset=["goodman_pct", "beam_pct", "gbx_pct"], how="all")
-                keep = ov[~ov["Well"].isin(edited["Well"])] if len(ov) else ov
-                out = pd.concat([keep, new], ignore_index=True)
-                try:
-                    out.to_csv(os.path.join(data_dir, OVERRIDES_FILE), index=False)
-                    st.success("Successfully saved manual overrides. Rerunning evaluation...")
-                    st.rerun()
-                except OSError as exc:
-                    st.error(f"Could not save: {exc}")
+        if role == "Admin":
+            with st.expander("✍️ Manual Dynamometer Overrides & Parameter Corrections [Admin Control]"):
+                st.caption("Values entered here override master text parsing and Echometer imports. Rod loaded, beam loading, and gearbox torque are in %.")
+                pool = res[res["Rank"].notna() | ((res["Status"] == "RUNNING") & res["net_oil"].notna() & (res["net_oil"] > thr))]
+                only_gaps = st.checkbox("Only show wells with missing data", True, key="dig_only_gaps")
+                ed = pool[["Well", "goodman_pct", "beam_pct", "gbx_pct"]].copy()
+                if only_gaps:
+                    ed = ed[ed[["goodman_pct", "beam_pct", "gbx_pct"]].isna().any(axis=1)]
+                ov = load_overrides(data_dir)
+                base_ov = ov.set_index("Well") if len(ov) else pd.DataFrame(columns=["goodman_pct", "beam_pct", "gbx_pct", "Note"])
+                show = pd.DataFrame({"Well": ed["Well"],
+                                     "Found: rod loaded (%)": ed["goodman_pct"].values, "Found: beam (%)": ed["beam_pct"].values, "Found: gearbox (%)": ed["gbx_pct"].values,
+                                     "Rod loaded (%)": [base_ov["goodman_pct"].get(w, np.nan) for w in ed["Well"]],
+                                     "Beam loading (%)": [base_ov["beam_pct"].get(w, np.nan) for w in ed["Well"]], 
+                                     "Gearbox torque (%)": [base_ov["gbx_pct"].get(w, np.nan) for w in ed["Well"]]})
+                edited = st.data_editor(show, hide_index=True, key="dig_editor", disabled=["Well", "Found: rod loaded (%)", "Found: beam (%)", "Found: gearbox (%)"], **ui.get("STRETCH", {}))
+                if st.button("💾 Save Manual Values", key="dig_save"):
+                    new = pd.DataFrame({"Well": edited["Well"], "goodman_pct": edited["Rod loaded (%)"],
+                                        "beam_pct": edited["Beam loading (%)"], "gbx_pct": edited["Gearbox torque (%)"], "Note": "manual"})
+                    new = new.dropna(subset=["goodman_pct", "beam_pct", "gbx_pct"], how="all")
+                    keep = ov[~ov["Well"].isin(edited["Well"])] if len(ov) else ov
+                    out = pd.concat([keep, new], ignore_index=True)
+                    try:
+                        out.to_csv(os.path.join(data_dir, OVERRIDES_FILE), index=False)
+                        st.success("Successfully saved manual overrides. Rerunning evaluation...")
+                        st.rerun()
+                    except OSError as exc:
+                        st.error(f"Could not save: {exc}")
+        else:
+            st.info("🔒 **Manual Override & Data Editing Locked**: Only users with **Admin** clearance can modify or input manual dynamometer overrides.")
 
         with st.expander("Wells Not Assessed & Diagnostic Logs"):
             na = res[res["Recommendation"] == "Not assessed"][["Well", "Status", "Reason", "last_test", "days_since_test"]].rename(columns={"last_test": "Last test", "days_since_test": "Days since test"})
