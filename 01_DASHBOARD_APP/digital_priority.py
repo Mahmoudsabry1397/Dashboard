@@ -19,8 +19,19 @@ TECH_ORDER = ["VSD", "ROPC", "PT sensor"]
 COLORS = {"VSD": "#CE1141", "ROPC": "#E08A00", "PT sensor": "#1F7A8C", "Not assessed": "#9AA0A6"}
 EMOJI = {"VSD": "🟥 VSD", "ROPC": "🟧 ROPC", "PT sensor": "🟦 PT sensor", "Not assessed": "⬜ Not assessed"}
 OVERRIDES_FILE = "Digitalization_DynaOverrides.csv"
+SETTINGS_FILE = "Digitalization_Settings.json"
 BBL = 6.28981
 FT = 3.28084
+
+# Updated default settings matching your custom ratios (VSD: 48%, ROPC: 45%)
+DEFAULT_SETTINGS = {
+    "thr": 4.0,
+    "vsd": 48,
+    "ropc": 45,
+    "age": 0,
+    "base": "Ranked wells (net oil above the threshold)",
+    "miss": "The median score of the other wells",
+}
 
 PARAMS = [("net_oil", "Net oil", 10.0, 30.0), ("gross", "Gross rate", 0.0, 10.0), ("nlap", "NLAP", 0.0, 10.0),
           ("rod", "Rod loaded", 0.0, 10.0), ("beam", "Beam loading", 0.0, 10.0), ("gbx", "Gearbox torque", 0.0, 10.0)]
@@ -123,6 +134,31 @@ def load_overrides(data_dir: str) -> pd.DataFrame:
         except Exception:
             pass
     return pd.DataFrame(columns=cols)
+
+def load_settings(data_dir: str) -> dict:
+    cfg = DEFAULT_SETTINGS.copy()
+    if not data_dir:
+        return cfg
+    p = os.path.join(data_dir, SETTINGS_FILE)
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            if isinstance(saved, dict):
+                cfg.update(saved)
+        except Exception:
+            pass
+    return cfg
+
+def save_settings(data_dir: str, cfg: dict) -> tuple[bool, str]:
+    try:
+        os.makedirs(data_dir or ".", exist_ok=True)
+        p = os.path.join(data_dir, SETTINGS_FILE)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+        return True, ""
+    except OSError as exc:
+        return False, str(exc)
 
 def collect_inputs(wells, status_map: dict, tests_all: pd.DataFrame, dfl_all: pd.DataFrame, df: pd.DataFrame, M: dict, wellcol: str,
                    data_dir: str = "", today=None) -> pd.DataFrame:
@@ -522,7 +558,6 @@ def check_authentication():
                 submit = st.form_submit_button("Sign In securely", use_container_width=True)
                 
                 if submit:
-                    # Updated custom users dictionary
                     users = {
                         "WFRD": {"password": "2026", "role": "Admin", "name": "Weatherford Administrator"},
                         "Petrobel2026": {"password": "1726", "role": "Operator", "name": "Petrobel Operator"}
@@ -540,7 +575,6 @@ def check_authentication():
         st.stop()
 
 def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, selected, ui, data_dir):
-    # Enforce Authentication check
     check_authentication()
 
     role = st.session_state.get("role", "Operator")
@@ -573,24 +607,62 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
     """, unsafe_allow_html=True)
 
     all_wells = sorted({str(w) for w in df[wellcol].dropna().astype(str)})
+    saved_cfg = load_settings(data_dir)
+
+    base_options = ["Ranked wells (net oil above the threshold)", "All running wells"]
+    miss_options = ["The median score of the other wells", "The lowest score"]
 
     if role == "Admin":
         with st.expander("⚙️ Advanced Screening & Scoring Settings [Admin Control]"):
             c = st.columns(4)
-            thr = c[0].number_input("Automatic PT sensor at or below (net oil, m³/d)", 0.0, 100.0, 4.0, 0.5, key="dig_thr")
+            thr = c[0].number_input("Automatic PT sensor at or below (net oil, m³/d)", 0.0, 100.0, float(saved_cfg["thr"]), 0.5, key="dig_thr")
             c[0].caption(f"≈ {thr * BBL:,.0f} BOPD")
-            vsd = c[1].number_input("VSD: top share of ranked wells (%)", 0, 100, 30, 5, key="dig_vsd")
-            ropc = c[2].number_input("ROPC: next share (%)", 0, 100, 30, 5, key="dig_ropc")
-            age = c[3].number_input("Ignore tests older than (days, 0 = never)", 0, 1000, 0, 30, key="dig_age")
+            vsd = c[1].number_input("VSD: top share of ranked wells (%)", 0, 100, int(saved_cfg["vsd"]), 5, key="dig_vsd")
+            ropc = c[2].number_input("ROPC: next share (%)", 0, 100, int(saved_cfg["ropc"]), 5, key="dig_ropc")
+            age = c[3].number_input("Ignore tests older than (days, 0 = never)", 0, 1000, int(saved_cfg["age"]), 30, key="dig_age")
             c2 = st.columns(2)
-            base = c2[0].radio("Shares are taken of", ["Ranked wells (net oil above the threshold)", "All running wells"], key="dig_base")
-            miss = c2[1].radio("A well with a missing dynamometer value gets", ["The median score of the other wells", "The lowest score"], key="dig_miss")
+            base_idx = base_options.index(saved_cfg["base"]) if saved_cfg.get("base") in base_options else 0
+            miss_idx = miss_options.index(saved_cfg["miss"]) if saved_cfg.get("miss") in miss_options else 0
+            base = c2[0].radio("Shares are taken of", base_options, index=base_idx, key="dig_base")
+            miss = c2[1].radio("A well with a missing dynamometer value gets", miss_options, index=miss_idx, key="dig_miss")
             if vsd + ropc > 100:
                 st.warning("VSD and ROPC shares add up to more than 100%: the ROPC group is reduced to fit.")
+
+            if st.button("💾 Save & Publish Settings for All Users", key="dig_save_settings"):
+                new_cfg = {
+                    "thr": float(thr),
+                    "vsd": int(vsd),
+                    "ropc": int(ropc),
+                    "age": int(age),
+                    "base": base,
+                    "miss": miss,
+                }
+                ok, err = save_settings(data_dir, new_cfg)
+                if ok:
+                    st.success("Settings saved and published! All Operators will now see these updated ratios.")
+                else:
+                    st.error(f"Could not save settings: {err}")
     else:
-        thr, vsd, ropc, age = 4.0, 30, 30, 0
-        base, miss = "Ranked wells (net oil above the threshold)", "The median score of the other wells"
-        st.sidebar.info("ℹ️ **Operator Mode**: Screening settings and weight percentages are managed by Administrators.")
+        thr = float(saved_cfg["thr"])
+        vsd = int(saved_cfg["vsd"])
+        ropc = int(saved_cfg["ropc"])
+        age = int(saved_cfg["age"])
+        base = saved_cfg["base"]
+        miss = saved_cfg["miss"]
+        pt_share = max(0, 100 - vsd - ropc)
+
+        with st.expander("ℹ️ Active Screening & Scoring Ratios [Operator View - Read Only]"):
+            st.markdown(f"""
+            - **Automatic PT Sensor Threshold:** `{thr:g} m³/d` (≈ `{thr * BBL:,.0f}` BOPD)
+            - **VSD Quota (Top Share):** `{vsd}%` of ranked wells
+            - **ROPC Quota (Next Share):** `{ropc}%` of ranked wells
+            - **PT Sensor Quota (Remaining):** `{pt_share}%` (Balance)
+            - **Ignore Tests Older Than:** `{age} days` {"(disabled)" if age == 0 else ""}
+            - **Base Evaluation Pool:** `{base}`
+            - **Missing Data Policy:** `{miss}`
+            
+            *Note: Only users logged in under the **Admin** role (`WFRD`) are authorized to modify these criteria.*
+            """)
 
     inputs = collect_inputs(all_wells, status_map, tests_all, dfl_all, df, M, wellcol, data_dir)
     res, meta = build_priority(inputs, thr, vsd, ropc, "running" if base.startswith("All") else "matrix", "median" if miss.startswith("The median") else "lowest", age)
@@ -732,13 +804,13 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
 
     with t3:
         section("Artificial Lift & Digitalization Decision Framework")
-        st.markdown("""
+        st.markdown(f"""
         ### Engineering Methodology & Evaluation Logic
         The digitalization selection engine applies a robust multi-criteria decision analysis (MCDA) model:
 
         1. **Operating Status Filter:**
            * Only **RUNNING** wells are evaluated. Stopped wells or wells with missing operational logs are automatically excluded.
-           * **Automatic PT Sensor Assignment:** Any running well with a latest test net oil $\le$ threshold ($4\text{ m}^3/\text{d} \approx 25\text{ BOPD}$) receives a **PT Sensor** automatically without matrix competition.
+           * **Automatic PT Sensor Assignment:** Any running well with a latest test net oil $\le$ threshold (`{thr:g}` m³/d ≈ `{thr * BBL:,.0f}` BOPD) receives a **PT Sensor** automatically without matrix competition.
 
         2. **Multi-Parameter Priority Matrix (0–10 scale per parameter):**
            Running wells above the threshold are ranked based on normalized linear distribution:
@@ -751,9 +823,9 @@ def render_digitalization(df, tests_all, dfl_all, status_map, wellcol, M, select
            * **Total Priority Score:** Sum of all 6 parameters (Maximum possible = 80 points).
 
         3. **Deployment Recommendation Quotas:**
-           * **VSD Candidates:** Top share of ranked wells (default top 30%).
-           * **ROPC Candidates:** Next share of ranked wells (default next 30%).
-           * **PT Sensors (Ranked):** Remaining balance of matrix wells (default 40%).
+           * **VSD Candidates:** Top share of ranked wells (**{vsd}%**).
+           * **ROPC Candidates:** Next share of ranked wells (**{ropc}%**).
+           * **PT Sensors (Ranked):** Remaining balance of matrix wells (**{max(0, 100 - vsd - ropc)}%**).
         """)
         
         st.info(f"**Active Configuration:** Net Oil Threshold = {thr:g} m³/d | VSD Quota = {vsd}% | ROPC Quota = {ropc}% | Missing Data Handling = {miss}")
